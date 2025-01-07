@@ -58,13 +58,13 @@ class BaseStrategy:
         self.filtered_stock_list:list[str]=None
         self.action_logger=ActionLogger()
 
-        self.lookback=5
+        self.lookback=4
         self.roe_threshold=15.0
         self.profit_gr_threshold=0
         self.recent_profit_gr_threshold=5
         self.profit_gr_avg_threshold=10
         self.select_num=30
-        self.tolerate=2#允许一年财报异常
+        self.tolerate=1#允许一年财报异常
         return
     
     def __check_finance(self,finance_data,date,recover_threshhold):

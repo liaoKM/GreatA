@@ -29,8 +29,8 @@ def gen_date_range(year:int):
 if __name__=='__main__':
     
     profit_dataframe_list=[]
-    start_year=2022
-    end_year=2024
+    start_year=2017
+    end_year=2021
 
     # WarmUp: request data and save to csv
     # finance_data=RawData.get_finance_data()
