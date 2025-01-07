@@ -58,14 +58,34 @@ class BaseStrategy:
         self.filtered_stock_list:list[str]=None
         self.action_logger=ActionLogger()
 
+        self.lookback=5
         self.roe_threshold=15.0
         self.profit_gr_threshold=0
         self.recent_profit_gr_threshold=5
         self.profit_gr_avg_threshold=10
         self.select_num=30
-
+        self.tolerate=2#允许一年财报异常
         return
     
+    def __check_finance(self,finance_data,date,recover_threshhold):
+        #年报时间异常，可能是新股
+        if finance_data.notice_date>=date:
+            return False,1e9
+        
+        if recover_threshhold>0:
+            if finance_data.non_gaap_net_profit_yoy_gr<recover_threshhold:
+                return False,recover_threshhold-finance_data.non_gaap_net_profit_yoy_gr
+        else:
+            #扣非盈利大额衰减
+            if not finance_data.non_gaap_net_profit_yoy_gr>=self.profit_gr_threshold:
+                return False,finance_data.non_gaap_net_profit_yoy_gr
+            
+        #财报正常增粘，但roe过低
+        if not finance_data.roe_non_gaap_wtd>=self.roe_threshold:
+            return False,1e9
+        
+        return True,0
+
     def pre_filter(self,year):
         self.filtered_stock_list=[]
 
@@ -73,34 +93,22 @@ class BaseStrategy:
         stock_list:list[str]=[]
         for stock_code in all_stocks:
             finance_datas=self.finance_data[self.finance_data['stock_code']==stock_code]
-            #近两年财报
-            bad_finance=False
-            profit_gr_last_2_year=0
-            recent_annual_financial_report=None
-            for finance_year in range(year-3,year-1):
+            #回测X年，X-1年财报可能未出[X-1-Lookback,X-1)，X-1财报已出[X-Lookback,X)
+            #PreFilter交集[X-Lookback,X-1)
+            NegativeCount=0
+            recover_threshhold=0
+            for finance_year in range(year-self.lookback,year-1):
                 finance_data=finance_datas[finance_datas['report_date']==str(finance_year)+'-12-31']
                 if finance_data.empty:
-                    bad_finance=True
+                    NegativeCount=self.tolerate+1
                     break
-                finance_data=finance_data.iloc[0]
-                #年报时间异常：
-                if finance_data.notice_date>=(str(year)+'-01-01'):
-                    break
-                #roe过低
-                if finance_data.roe_non_gaap_wtd<self.roe_threshold:
-                    bad_finance=True
-                    break
-                #扣非盈利大额衰减
-                if finance_data.non_gaap_net_profit_yoy_gr<self.profit_gr_threshold:
-                    bad_finance=True
-                    break
-                profit_gr_last_2_year+=finance_data.non_gaap_net_profit_yoy_gr
-            # 增长乏力
-            if profit_gr_last_2_year<self.profit_gr_avg_threshold*2:
-                bad_finance=True
-            if bad_finance:
-                continue
-            else:
+
+                #check report
+                is_positive_report,recover_threshhold=self.__check_finance(finance_data.iloc[0],str(year)+'-01-01',recover_threshhold)
+                if is_positive_report==False:
+                    NegativeCount+=1
+                
+            if NegativeCount<=self.tolerate:
                 stock_list.append(stock_code)
 
         return stock_list
@@ -126,40 +134,42 @@ class BaseStrategy:
             stock_market=market_data[market_data['stock_code']==stock_code]
             if stock_finance.empty or stock_market.empty:
                 continue
-                
-
-            #过去两年财报
-            bad_finance=False  
-            profit_gr_sum=0
-            year_finance_reports=stock_finance[stock_finance['report_type']=='年报']
-            if len(year_finance_reports)<2:
+            
+            annual_finance_reports=stock_finance[stock_finance['report_type']=='年报']
+            if len(annual_finance_reports)<self.lookback:
                 continue
-            year_finance_reports=year_finance_reports.head(2)
-            for finance in year_finance_reports.itertuples():
-                if not finance.non_gaap_net_profit_yoy_gr>=self.profit_gr_threshold:
-                    bad_finance=True
-                    break
+            annual_finance_reports=annual_finance_reports.head(self.lookback)
+            recent_report=stock_finance.iloc[0]
+
+            #历史年报
+            NegativeCount=0
+            profit_gr_sum=0
+            recover_threshhold=0
+            for finance in annual_finance_reports.itertuples():
+                is_positive_report,recover_threshhold=self.__check_finance(finance,date,recover_threshhold)
+                if is_positive_report==False:
+                    NegativeCount+=1
                 profit_gr_sum+=finance.non_gaap_net_profit_yoy_gr
-            if not profit_gr_sum>=self.profit_gr_avg_threshold*2:
-                bad_finance=True
+            if not profit_gr_sum>=self.profit_gr_avg_threshold*self.lookback:
+                continue
+            if NegativeCount>self.tolerate:
+                continue
+
             #最近财报
-            finance=stock_finance.iloc[0]
-            if not finance.non_gaap_net_profit_yoy_gr>=self.profit_gr_avg_threshold:
-                bad_finance=True
-            if bad_finance:
+            if not recent_report.non_gaap_net_profit_yoy_gr>=self.profit_gr_avg_threshold:
                 continue
             
             #pe
             stock_market=stock_market.iloc[0]
-            if finance.report_type=='一季报':
-                non_gaap_eps=float(finance.non_gaap_eps*4)
-            elif finance.report_type=='中报':
-                non_gaap_eps=float(finance.non_gaap_eps*2)
-            elif finance.report_type=='三季报':
-                non_gaap_eps=float(finance.non_gaap_eps/3*4)
+            if recent_report.report_type=='一季报':
+                non_gaap_eps=float(recent_report.non_gaap_eps*4)
+            elif recent_report.report_type=='中报':
+                non_gaap_eps=float(recent_report.non_gaap_eps*2)
+            elif recent_report.report_type=='三季报':
+                non_gaap_eps=float(recent_report.non_gaap_eps/3*4)
             else:
-                non_gaap_eps=finance.non_gaap_eps
-            if not finance.non_gaap_eps>0:
+                non_gaap_eps=recent_report.non_gaap_eps
+            if not recent_report.non_gaap_eps>0:
                 continue
             pe=stock_market.stock_price/non_gaap_eps
             dataframe_list.append([stock_code,pe,stock_market.close])

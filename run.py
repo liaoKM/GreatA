@@ -29,7 +29,7 @@ def gen_date_range(year:int):
 if __name__=='__main__':
     
     profit_dataframe_list=[]
-    start_year=2020
+    start_year=2022
     end_year=2024
 
     # WarmUp: request data and save to csv
