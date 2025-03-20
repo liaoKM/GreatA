@@ -94,3 +94,7 @@ class LocalDataManager(BaseManager):
     def get_marketday_list(self)->list[str]:
         marketday_list=list(self.market_data["trade_date"].unique())
         return marketday_list
+    
+    def get_all_stockcode(self)->list[str]:
+        stocks=list(self.market_data["stock_code"].unique())
+        return stocks
