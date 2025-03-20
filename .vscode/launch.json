@@ -12,6 +12,14 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+        {
+            "name": "run",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./run.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }

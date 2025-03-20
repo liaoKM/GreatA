@@ -3,7 +3,7 @@ import pandas
 import matplotlib.pyplot as plt
 
 if __name__=='__main__':
-    for year in range(2017,2020):
+    for year in range(2023,2024):
         actions=pandas.read_csv('./result/actions-{0}.csv'.format(year),dtype={'stock_code':str})
         logger=ActionLogger()
         logger.actions=actions

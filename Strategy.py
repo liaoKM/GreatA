@@ -58,13 +58,14 @@ class BaseStrategy:
         self.filtered_stock_list:list[str]=None
         self.action_logger=ActionLogger()
 
-        self.lookback=4
+        self.lookback=3
         self.roe_threshold=15.0
         self.profit_gr_threshold=0
         self.recent_profit_gr_threshold=5
         self.profit_gr_avg_threshold=10
         self.select_num=30
-        self.tolerate=1#允许一年财报异常
+        self.exception_threshold=0#允许一年财报异常
+        self.exception_years=[2022]
         return
     
     def __check_finance(self,finance_data,date,recover_threshhold):
@@ -100,15 +101,16 @@ class BaseStrategy:
             for finance_year in range(year-self.lookback,year-1):
                 finance_data=finance_datas[finance_datas['report_date']==str(finance_year)+'-12-31']
                 if finance_data.empty:
-                    NegativeCount=self.tolerate+1
+                    NegativeCount=self.exception_threshold+1
                     break
 
                 #check report
                 is_positive_report,recover_threshhold=self.__check_finance(finance_data.iloc[0],str(year)+'-01-01',recover_threshhold)
                 if is_positive_report==False:
-                    NegativeCount+=1
+                    if finance_year not in self.exception_years:
+                        NegativeCount+=1
                 
-            if NegativeCount<=self.tolerate:
+            if NegativeCount<=self.exception_threshold:
                 stock_list.append(stock_code)
 
         return stock_list
@@ -148,16 +150,18 @@ class BaseStrategy:
             for finance in annual_finance_reports.itertuples():
                 is_positive_report,recover_threshhold=self.__check_finance(finance,date,recover_threshhold)
                 if is_positive_report==False:
-                    NegativeCount+=1
+                    if int(finance.report_date[:4]) not in self.exception_years:
+                        NegativeCount+=1
                 profit_gr_sum+=finance.non_gaap_net_profit_yoy_gr
             if not profit_gr_sum>=self.profit_gr_avg_threshold*self.lookback:
                 continue
-            if NegativeCount>self.tolerate:
+            if NegativeCount>self.exception_threshold:
                 continue
 
             #最近财报
             if not recent_report.non_gaap_net_profit_yoy_gr>=self.profit_gr_avg_threshold:
-                continue
+                if int(recent_report.report_date[:4]) not in self.exception_years:
+                    continue
             
             #pe
             stock_market=stock_market.iloc[0]
