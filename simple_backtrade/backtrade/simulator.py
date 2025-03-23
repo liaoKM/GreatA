@@ -20,7 +20,7 @@ class LocalSimulator:
         
         #交易时间
         self.marketday_list=self.data_manager.get_marketday_list()
-        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time)
+        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time,True)
         self.trade=LocalTrading(self.data_manager)
         return
     
@@ -32,13 +32,16 @@ class LocalSimulator:
             if data.stock_code in account.stocks.keys():
                 xr_pattern='10股转赠(.*?)股'
                 xd_pattern='10股派(.*?)元'
-                right=re.search(xr_pattern,data.dividend_plan)
-                dividend=re.search(xd_pattern,data.dividend_plan)
-                if (right is None) and (dividend is None):
+                right=re.findall(xr_pattern,data.dividend_plan)
+                dividend=re.findall(xd_pattern,data.dividend_plan)
+                assert len(right)<=1 and len(dividend)<=1
+                if len(right)!=1 and len(dividend)!=1:
                     print("[Warning]:{0} xrxd data missing!",data.stock_code)
                 takes_num=account.stocks[data.stock_code]
-                account.money+=int(takes_num/10)*dividend
-                account.stocks[data.stock_code]+=int(takes_num/10)*right
+                if len(dividend)==1:
+                    account.money+=int(takes_num/10)*float(dividend[0])
+                if len(right)==1:
+                    account.stocks[data.stock_code]+=int(int(takes_num/10)*float(right[0]))
         return
     
     def __get_new_finance_report(self,prev_date,date)->pandas.DataFrame:
@@ -56,19 +59,14 @@ class LocalSimulator:
             self.__XRXD(self.account,prev_date,date)
             new_finance_report=self.__get_new_finance_report(prev_date,date)
             self.strategy.handle_report(date,new_finance_report)
-            buy_list,sell_list=self.strategy.handle_bar(date,self.data_manager)
-            self.daily_settlement(date,buy_list,sell_list)
+            keep_stocks=self.strategy.handle_bar(date)
+            self.daily_settlement(date,list(keep_stocks['stock_code']))
             prev_date=date
         return
     
-    def daily_settlement(self,date:str,buy_list:list[tuple[str,int]],sell_list:list[tuple[str,int]]):
-        for stock,num in sell_list:
-            result=self.trade.order(self.account,stock,-num,date)
-            if result==False:
-                print("[Warning]:order fail!")
-        for stock,num in buy_list:
-            result=self.trade.order(self.account,stock,num,date)
-            if result==False:
-                print("[Warning]:order fail!")
-
+    def daily_settlement(self,date:str,stock_list:list[str]):
+        
+        self.account.sell_all(self.data_manager,date)
+        self.account.estimate_asset(self.data_manager,date)
+        self.account.buyin(self.data_manager,date,stock_list)
         return

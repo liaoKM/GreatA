@@ -44,12 +44,12 @@ class LocalDataManager(BaseManager):
             market_data_list.append(self.__load_market_data(i))
         market_data=pandas.concat(market_data_list)
 
-        filtered_finance_data=entire_finance_data[(entire_finance_data['notice_date']>=start_time)&(entire_finance_data['notice_date']<=end_time)]
+        filtered_finance_data=entire_finance_data#[(entire_finance_data['notice_date']>=start_time)&(entire_finance_data['notice_date']<=end_time)]
         filtered_xrxd_data=entire_xrxd_data[(entire_xrxd_data['ex_dividend_date']>=start_time)&(entire_xrxd_data['ex_dividend_date']<=end_time)]
         filtered_market_data=market_data[(market_data['trade_date']>=start_time)&(market_data['trade_date']<=end_time)]
         if len(stocks)>0:
-            filtered_finance_data=filtered_finance_data[filtered_finance_data['stock_code'] in stocks]
-            filtered_market_data=filtered_market_data[filtered_market_data['stock_code'] in stocks]
+            filtered_finance_data=filtered_finance_data[filtered_finance_data['stock_code'].isin(stocks)]
+            filtered_market_data=filtered_market_data[filtered_market_data['stock_code'].isin(stocks)]
         self.finance_data=filtered_finance_data.sort_values("notice_date").copy()
         self.market_data=filtered_market_data.sort_values("trade_date").copy()
         self.xrxd_data=filtered_xrxd_data.sort_values("ex_dividend_date").copy()
@@ -57,10 +57,10 @@ class LocalDataManager(BaseManager):
     
     def get_daily_market_data(self,date,stocks=[])->pandas.DataFrame:
         if len(stocks)>0:
-            data_frames=self.market_data[(self.market_data["trade_date"]==date)&(self.market_data["stock_code"] in stocks)]
+            data_frames=self.market_data[(self.market_data["trade_date"]==date)&(self.market_data["stock_code"].isin(stocks))]
         else:
             data_frames=self.market_data[(self.market_data["trade_date"]==date)]
-        return data_frames
+        return data_frames.set_index('stock_code')
     
     def get_stock_market_data(self,stock_code,start_time,end_time)->pandas.DataFrame:
         assert(start_time>=self.data_range[0] and end_time<=self.data_range[1])
@@ -71,11 +71,12 @@ class LocalDataManager(BaseManager):
         data_frames=self.market_data[(self.market_data["trade_date"]<=now_date)&(self.market_data["stock_code"]==stock_code)]
         return data_frames.tail(count)
     
-    def get_recent_finance_data(self,now_date,stock_code,count=1,type:FinanceReportType=FinanceReportType.ANY)->pandas.DataFrame:
-        if type!=FinanceReportType.ANY:
-            data_frame=self.finance_data[(self.finance_data["report_date"]==type)&(self.finance_data["stock_code"]==stock_code)&(self.finance_data["notice_date"]<now_date)]
+    def get_recent_finance_data(self,now_date,stock_code,count=1,report_type:FinanceReportType=FinanceReportType.ANY)->pandas.DataFrame:
+        if report_type!=FinanceReportType.ANY:
+            data_frame=self.finance_data[(self.finance_data["report_type"]==report_type.value)&(self.finance_data["stock_code"]==stock_code)&(self.finance_data["notice_date"]<=now_date)]
         else:
-            data_frame=self.finance_data[(self.finance_data["stock_code"]==stock_code)&(self.finance_data["notice_date"]<now_date)]
+            data_frame=self.finance_data[(self.finance_data["stock_code"]==stock_code)&(self.finance_data["notice_date"]<=now_date)]
+        data_frame=data_frame.sort_values(by='report_date')
         return data_frame.tail(count)
     
     def get_xrxd_data(self,start_time,end_time)->pandas.DataFrame:
@@ -86,9 +87,15 @@ class LocalDataManager(BaseManager):
     def get_noticed_finance_report(self,start_time,end_time,stocks=[])->pandas.DataFrame:
         assert(start_time>=self.data_range[0] and end_time<=self.data_range[1])
         if len(stocks)>0:
-            data_frames=self.finance_data[(self.finance_data["notice_date"]<=end_time)&(self.finance_data["notice_date"]>=start_time)&(self.finance_data["stock_code"] in stocks)]
+            data_frames=self.finance_data[(self.finance_data["notice_date"]<=end_time)&(self.finance_data["notice_date"]>=start_time)&(self.finance_data["stock_code"].isin(stocks))]
         else:
             data_frames=self.finance_data[(self.finance_data["notice_date"]<=end_time)&(self.finance_data["notice_date"]>=start_time)]
+
+        try:
+            data_frame=data_frame.sort_values(by='report_date')
+        except:
+            data_frame=None
+
         return data_frames
     
     def get_marketday_list(self)->list[str]:

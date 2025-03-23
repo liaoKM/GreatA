@@ -2,12 +2,12 @@ from enum import Enum
 
 class FinanceReportType(Enum):
     ANY=''
-    S1='03-31'
-    S2='06-30'
-    S3='09-30'
-    S4='12-31'
-    MID='06-30'
-    ANNUAL='12-31'
+    S1='一季报'
+    S2='中报'
+    S3='三季报'
+    S4='年报'
+    MID='中报'
+    ANNUAL='年报'
     
 
 
