@@ -61,7 +61,7 @@ class LocalSimulator:
             new_finance_report=self.__get_new_finance_report(prev_date,date)
             self.strategy.handle_report(date,new_finance_report)
             keep_stocks=self.strategy.handle_bar(date)
-            self.daily_settlement(date,list(keep_stocks['stock_code']))
+            self.daily_settlement(date,list(keep_stocks.index))
             prev_date=date
         return
     

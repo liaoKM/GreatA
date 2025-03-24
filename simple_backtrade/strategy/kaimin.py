@@ -32,6 +32,7 @@ class BaseStrategy:
             if use_cached_data:
                 self.stock_factors.index.name='index'
                 self.stock_factors.to_csv("./cached_fractors.csv")
+        
         return
     
     def _update_fractor(self,stock_code,date,history_score):
@@ -133,8 +134,14 @@ class BaseStrategy:
         
         return profit_grows.mean()
     
-    def handle_bar(self,date:str)->tuple[list[tuple[str,int]],list[tuple[str,int]]]:
+    def handle_bar(self,date:str)->pandas.DataFrame:
         keeps_num=20
+
+        baseline=self.data_manager.get_recent_baseline(date,1).iloc[0].close
+        baseline_m200=self.data_manager.get_recent_baseline(date,400).close.mean()
+        if baseline<baseline_m200:
+            print("{}: bear".format(date))
+            return pandas.DataFrame()
 
         stock_list=self.stock_factors['stock_code'].unique()
         market_data=self.data_manager.get_daily_market_data(date,list(stock_list)+list(self.account_ref.stocks.index))
@@ -158,13 +165,7 @@ class BaseStrategy:
 
         low_estimat=self.stock_factors[self.stock_factors['pe']<35]
         rising_low=low_estimat[low_estimat['rising']==True]
-        weight=len(rising_low)/len(low_estimat)
-        if weight>0.2:
-            keep_stocks=rising_low.sort_values(by='pe').head(keeps_num)
-        else:
-            print("{0}: bear".format(date))
-            keep_stocks=rising_low.sort_values(by='pe').head(0)
-        
+        keep_stocks=rising_low.sort_values(by='pe').head(keeps_num)
         return keep_stocks
     
     def handle_report(self,date:str,dataframe:pandas.DataFrame):

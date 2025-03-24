@@ -1,6 +1,7 @@
 import pandas
 import os
-import datetime
+from datetime import datetime, timedelta
+import adata
 
 from . import adata_request
 from .base_manager import BaseManager,FinanceReportType
@@ -53,7 +54,15 @@ class LocalDataManager(BaseManager):
         self.finance_data=filtered_finance_data.sort_values("notice_date").copy()
         self.market_data=filtered_market_data.sort_values("trade_date").copy().set_index('stock_code')
         self.xrxd_data=filtered_xrxd_data.sort_values("ex_dividend_date").copy()
+
+        baseline_start_time=(datetime.strptime(start_time, "%Y-%m-%d")-timedelta(days=365*2)).strftime("%Y-%m-%d")#取400日均线
+        self.baseline=adata.stock.market.get_market_index('000300',start_time).sort_values("trade_date")
+
         return
+    
+    def get_recent_baseline(self,date,count=1):
+        self.baseline[self.baseline['trade_date']<=date].tail(count)
+        return self.baseline[self.baseline['trade_date']<=date].tail(count)
     
     def get_daily_market_data(self,date,stocks=[])->pandas.DataFrame:
         if len(stocks)>0:
