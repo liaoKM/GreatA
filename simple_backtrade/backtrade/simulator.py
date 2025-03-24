@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 class LocalSimulator:
     def __init__(self,start_time:str,end_time:str,account:SimpleAccount=None):
         self.data_manager=LocalDataManager()
-        self.data_manager.init_range(start_time,end_time)
+        data_start_time=(datetime.strptime(start_time, "%Y-%m-%d")-timedelta(days=30)).strftime("%Y-%m-%d")
+        self.data_manager.init_range(data_start_time,end_time)
         self.start_time=start_time
         self.end_time=end_time
         if account is not None:
@@ -19,7 +20,7 @@ class LocalSimulator:
             self.account=SimpleAccount(1_000_000)
         
         #交易时间
-        self.marketday_list=self.data_manager.get_marketday_list()
+        self.marketday_list=self.data_manager.get_marketday_list(self.start_time,self.end_time)
         self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time,True)
         self.trade=LocalTrading(self.data_manager)
         return

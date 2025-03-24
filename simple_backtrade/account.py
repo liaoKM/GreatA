@@ -1,58 +1,48 @@
 from .data.data_manager import LocalDataManager
+import pandas
 class SimpleAccount:
     def __init__(self,init_money):
         self.money=init_money
-        self.stocks:dict[str,int]={}
-        self.buyin_price:dict[str,int]={}
-        self.profit:dict[str,float]={}
+        self.stocks=pandas.DataFrame(columns=['stock_code','num'],dtype=(str,int)).set_index('stock_code')
+        self.buyin_price=pandas.DataFrame(columns=['stock_code','price'],dtype=(str,float)).set_index('stock_code')
+        self.profit=pandas.DataFrame(columns=['stock_code','profit'],dtype=(str,float)).set_index('stock_code')
         return
     
-    def estimate_asset(self,data_manager,date):
+    def estimate_asset(self,data_manager:LocalDataManager,date):
         asset=self.money
-        market_data=data_manager.get_daily_market_data(date,self.stocks.keys())
-        for stock_code,num in self.stocks.items():
-            try:
-                price=market_data.loc[stock_code].close
-            except:
-                #停牌
-                price=self.buyin_price[stock_code]
-            asset+=price*num
+        if self.stocks.empty==False:
+            asset+=(self.stocks['num']*self.buyin_price['price']).sum()
         print("{0}:{1}元".format(date,asset))
         return asset
     
     def sell_all(self,data_manager:LocalDataManager,date:str):
-        market_data=data_manager.get_daily_market_data(date,self.stocks.keys())
-        success_list=[]
-        for stock_code,num in self.stocks.items():
-            try:
-                price=market_data.loc[stock_code].close
-                self.money+=price*num
-                success_list.append(stock_code)
-                profit=(price-self.buyin_price[stock_code])*num
-                self.profit[stock_code]=self.profit.get(stock_code,0)+profit
-            except:
-                #停牌
-                pass
-        for stock_code in success_list:
-            self.stocks.pop(stock_code)
-            self.buyin_price.pop(stock_code)
+        if self.stocks.empty:
+            return
+        
+        price=data_manager.get_daily_market_data(date,self.stocks.index).close
+        success_index=price.index
+
+        self.money+=(price*self.stocks.loc[success_index,'num']).sum()
+        profit=(price-self.buyin_price.loc[success_index,'price'])*self.stocks.loc[success_index,'num']
+        self.profit['profit']=self.profit['profit'].add(profit,fill_value=0)
+
+        self.stocks=self.stocks.drop(success_index,axis='index')
+        self.buyin_price=self.buyin_price.drop(success_index,axis='index')
         
         if len(self.stocks)!=0:
-            print("clean account fail! #remain:{}".format(len(self.stocks)))
+            print("sell all fail! #remain:{}".format(len(self.stocks)))
         return
     
     def buyin(self,data_manager:LocalDataManager,date:str,stock_list:list[str]):
-        avg_money=self.money/len(stock_list)
+        if len(stock_list)==0:
+            return
+        
+        avg_money=self.money*min(1/len(stock_list),0.1)
         market_data=data_manager.get_daily_market_data(date,stock_list)
 
-        for stock_code in stock_list:
-            price=market_data.loc[stock_code].close
-            num=round(avg_money/price,-2)
-            self.money-=price*num
-            self.stocks[stock_code]=self.stocks.get(stock_code,0)+num
-            self.buyin_price[stock_code]=price
-        
-        if self.money<0:
-            print("date:{0} money:{1}".format(date,self.money))
-
+        price=market_data.loc[stock_list].close
+        num=(avg_money/price).round(-2).astype(int)
+        self.money-=((num*price).sum())
+        self.buyin_price['price']=price
+        self.stocks['num']=self.stocks['num'].add(num,fill_value=0)
         return

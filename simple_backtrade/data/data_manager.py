@@ -51,24 +51,28 @@ class LocalDataManager(BaseManager):
             filtered_finance_data=filtered_finance_data[filtered_finance_data['stock_code'].isin(stocks)]
             filtered_market_data=filtered_market_data[filtered_market_data['stock_code'].isin(stocks)]
         self.finance_data=filtered_finance_data.sort_values("notice_date").copy()
-        self.market_data=filtered_market_data.sort_values("trade_date").copy()
+        self.market_data=filtered_market_data.sort_values("trade_date").copy().set_index('stock_code')
         self.xrxd_data=filtered_xrxd_data.sort_values("ex_dividend_date").copy()
         return
     
     def get_daily_market_data(self,date,stocks=[])->pandas.DataFrame:
         if len(stocks)>0:
-            data_frames=self.market_data[(self.market_data["trade_date"]==date)&(self.market_data["stock_code"].isin(stocks))]
+            valid_index=[stock for stock in stocks if stock in self.market_data.index]
+            market_data=self.market_data.loc[valid_index]
+            data_frames=market_data[market_data["trade_date"]==date]
         else:
-            data_frames=self.market_data[(self.market_data["trade_date"]==date)]
-        return data_frames.set_index('stock_code')
+            data_frames=self.market_data[self.market_data["trade_date"]==date]
+        return data_frames
     
     def get_stock_market_data(self,stock_code,start_time,end_time)->pandas.DataFrame:
         assert(start_time>=self.data_range[0] and end_time<=self.data_range[1])
-        data_frames=self.market_data[(self.market_data["trade_date"]>=start_time)&(self.market_data["trade_date"]<=end_time)&(self.market_data["stock_code"]==stock_code)]
+        market_data=self.market_data.loc[stock_code]
+        data_frames=market_data[(market_data["trade_date"]>=start_time)&(market_data["trade_date"]<=end_time)]
         return data_frames
     
     def get_recent_stock_market_data(self,stock_code,now_date,count=1)->pandas.DataFrame:
-        data_frames=self.market_data[(self.market_data["trade_date"]<=now_date)&(self.market_data["stock_code"]==stock_code)]
+        market_data=self.market_data.loc[stock_code]
+        data_frames=market_data[market_data["trade_date"]<=now_date]
         return data_frames.tail(count)
     
     def get_recent_finance_data(self,now_date,stock_code,count=1,report_type:FinanceReportType=FinanceReportType.ANY)->pandas.DataFrame:
@@ -98,10 +102,10 @@ class LocalDataManager(BaseManager):
 
         return data_frames
     
-    def get_marketday_list(self)->list[str]:
-        marketday_list=list(self.market_data["trade_date"].unique())
+    def get_marketday_list(self,start_time,end_time)->list[str]:
+        marketday_list=list(self.market_data[(self.market_data["trade_date"]>=start_time)&(self.market_data["trade_date"]<=end_time)]["trade_date"].unique())
         return marketday_list
     
     def get_all_stockcode(self)->list[str]:
-        stocks=list(self.market_data["stock_code"].unique())
+        stocks=list(self.market_data.index.unique())
         return stocks

@@ -12,7 +12,7 @@ class BaseStrategy:
         self.data_manager=data_manager
         #history_score:过去4年财务表现
         #score:当前评分，根据市场价格数据刷新
-        self.stock_factors=pandas.DataFrame(data=None,columns=['stock_code','profit_per_share','asset_per_share','history_score','pe'])
+        self.stock_factors=pandas.DataFrame(data=None,columns=['stock_code','profit_per_share','asset_per_share','history_score','pe','rising'])
 
         if use_cached_data:
             data_types={'index':str,'stock_code':str}
@@ -64,7 +64,7 @@ class BaseStrategy:
         else:
             weighted_profit_per_share=profit_per_share
 
-        self.stock_factors.loc[stock_code]=[stock_code,weighted_profit_per_share,asset_per_share,history_score,100]
+        self.stock_factors.loc[stock_code]=[stock_code,weighted_profit_per_share,asset_per_share,history_score,100,False]
         return True
     
     def _check_recent_finance_report(self,stock_code,date):
@@ -137,9 +137,9 @@ class BaseStrategy:
         keeps_num=20
 
         stock_list=self.stock_factors['stock_code'].unique()
-        market_data=self.data_manager.get_daily_market_data(date,list(stock_list)+list(self.account_ref.stocks.keys()))
+        market_data=self.data_manager.get_daily_market_data(date,list(stock_list)+list(self.account_ref.stocks.index))
         if len(market_data)==0:
-            breakpoint()#error
+            breakpoint()#error debug
             return None
 
         for stock_code in self.stock_factors.index:
@@ -147,18 +147,24 @@ class BaseStrategy:
                 share_price=market_data.loc[stock_code].close
                 pe=share_price/self.stock_factors.loc[stock_code]['profit_per_share']
                 if np.isnan(pe) or pe<=0:
-                    breakpoint()#error
+                    breakpoint()#error debug
                 
-                #todo MEAN.20
                 mean20=self.data_manager.get_recent_stock_market_data(stock_code,date,20)['close'].mean()
-                if share_price>=mean20:
-                    self.stock_factors.at[stock_code,'pe']=pe
-                else:
-                    self.stock_factors.at[stock_code,'pe']=100
+                self.stock_factors.at[stock_code,'pe']=pe
+                self.stock_factors.at[stock_code,'rising']=(share_price>=mean20)
             except:
                 self.stock_factors.at[stock_code,'pe']=100
+                self.stock_factors.at[stock_code,'rising']=False
 
-        keep_stocks=self.stock_factors[self.stock_factors['pe']<50].sort_values(by='pe').head(keeps_num)
+        low_estimat=self.stock_factors[self.stock_factors['pe']<35]
+        rising_low=low_estimat[low_estimat['rising']==True]
+        weight=len(rising_low)/len(low_estimat)
+        if weight>0.2:
+            keep_stocks=rising_low.sort_values(by='pe').head(keeps_num)
+        else:
+            print("{0}: bear".format(date))
+            keep_stocks=rising_low.sort_values(by='pe').head(0)
+        
         return keep_stocks
     
     def handle_report(self,date:str,dataframe:pandas.DataFrame):

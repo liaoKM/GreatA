@@ -4,11 +4,12 @@ from multiprocessing import Pool
 import os
 import numpy as np
 import datetime
+import math
 
 def update(start_year:int,end_year:int,cache_path="./stock_data",parallel=True,clean=False):
     
     if clean==True or os.path.exists(os.path.join(cache_path,'all_finance_data.csv'))==False:
-        request_finance_data()
+        request_finance_data(parallel=parallel)
     
     if clean==True or os.path.exists(os.path.join(cache_path,'all_XRXD_data.csv'))==False:
         request_xrxd_data()
@@ -29,9 +30,7 @@ def update(start_year:int,end_year:int,cache_path="./stock_data",parallel=True,c
                 request_market_data(year)
     return
 
-def request_finance_data(cache_path="./stock_data"):
-    all_stocks=adata.stock.info.all_code()
-    all_stocks=all_stocks.set_index('stock_code')
+def request_finance_internal(all_stocks):
     finance_data_list:list[pandas.DataFrame]=[]
     for stock_code in all_stocks.index:
         finance_data=adata.stock.finance.get_core_index(stock_code)
@@ -40,7 +39,29 @@ def request_finance_data(cache_path="./stock_data"):
             if all_stocks.loc[stock_code].list_date.__class__ == datetime.date:
                 finance_data=finance_data[finance_data['report_date']>all_stocks.loc[stock_code].list_date.strftime("%Y-%m-%d")]
             finance_data_list.append(finance_data)
+    return finance_data_list
+    
+def request_finance_data(cache_path="./stock_data",parallel=True):
+    stocks_info=adata.stock.info.all_code()
+    stocks_info=stocks_info.set_index('stock_code')
+    
 
+    param_list=[]
+    stride=int(math.ceil(len(stocks_info)/12))
+    for i in range(0,12):
+        param_list.append(stocks_info[i*stride:(i+1)*stride])
+    
+    if parallel:
+        with Pool(len(param_list)) as p:
+            outputs=p.map(request_finance_internal,param_list)
+        finance_data_list=[]
+        for output in outputs:
+            finance_data_list+=output
+    else:
+        finance_data_list=[]
+        for param in param_list:
+            finance_data_list+=request_finance_internal(param)
+    
     pandas.concat(finance_data_list,ignore_index=True).to_csv(os.path.join(cache_path,'all_finance_data.csv'),index=False)        
     return
 
