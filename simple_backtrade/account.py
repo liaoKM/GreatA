@@ -24,7 +24,7 @@ class SimpleAccount:
 
         self.money+=(price*self.stocks.loc[success_index,'num']).sum()
         profit=(price-self.buyin_price.loc[success_index,'price'])*self.stocks.loc[success_index,'num']
-        self.profit['profit']=self.profit['profit'].add(profit,fill_value=0)
+        self.profit=self.profit['profit'].add(profit,fill_value=0).to_frame('profit')
 
         self.stocks=self.stocks.drop(success_index,axis='index')
         self.buyin_price=self.buyin_price.drop(success_index,axis='index')
@@ -43,6 +43,6 @@ class SimpleAccount:
         price=market_data.loc[stock_list].close
         num=(avg_money/price).round(-2).astype(int)
         self.money-=((num*price).sum())
-        self.buyin_price['price']=price
-        self.stocks['num']=self.stocks['num'].add(num,fill_value=0)
+        self.buyin_price=self.buyin_price._append(price.to_frame('price'))
+        self.stocks=self.stocks['num'].add(num,fill_value=0).to_frame('num')
         return

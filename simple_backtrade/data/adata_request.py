@@ -70,7 +70,7 @@ def request_market_data(year:int,cache_path="./stock_data"):
     all_stocks=all_stocks.set_index('stock_code')
     market_data_list=[]
     for stock_code in all_stocks.index:
-        market_data=adata.stock.market.get_market(stock_code,start_date=str(year)+'-01-01',end_date=str(year+1)+'-12-31',k_type=1,adjust_type=0)
+        market_data=adata.stock.market.get_market(stock_code,start_date=str(year)+'-01-01',end_date=str(year)+'-12-31',k_type=1,adjust_type=0)
         if market_data.empty == False:
             if all_stocks.loc[stock_code].list_date.__class__ == datetime.date:
                 market_data=market_data[market_data['trade_date']>all_stocks.loc[stock_code].list_date.strftime("%Y-%m-%d")]

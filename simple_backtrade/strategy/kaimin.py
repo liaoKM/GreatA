@@ -138,13 +138,11 @@ class BaseStrategy:
         keeps_num=20
 
         baseline=self.data_manager.get_recent_baseline(date,1).iloc[0].close
-        baseline_m200=self.data_manager.get_recent_baseline(date,400).close.mean()
-        if baseline<baseline_m200:
-            print("{}: bear".format(date))
-            return pandas.DataFrame()
+        baseline_m400=self.data_manager.get_recent_baseline(date,400).close.mean()
+        baseline_negative=(baseline<baseline_m400)
 
-        stock_list=self.stock_factors['stock_code'].unique()
-        market_data=self.data_manager.get_daily_market_data(date,list(stock_list)+list(self.account_ref.stocks.index))
+
+        market_data=self.data_manager.get_daily_market_data(date,self.stock_factors.index)
         if len(market_data)==0:
             breakpoint()#error debug
             return None
@@ -166,6 +164,18 @@ class BaseStrategy:
         low_estimat=self.stock_factors[self.stock_factors['pe']<35]
         rising_low=low_estimat[low_estimat['rising']==True]
         keep_stocks=rising_low.sort_values(by='pe').head(keeps_num)
+        strategy_negative=(len(rising_low)/len(low_estimat)<0.2)
+        strategy_positive=(len(rising_low)/len(low_estimat)>0.6)
+        if strategy_positive:
+            return keep_stocks
+        elif strategy_negative:
+            return pandas.DataFrame()
+        else:
+            if baseline_negative:
+                return pandas.DataFrame()
+            else:
+                return keep_stocks
+
         return keep_stocks
     
     def handle_report(self,date:str,dataframe:pandas.DataFrame):
