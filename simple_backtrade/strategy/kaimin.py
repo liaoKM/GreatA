@@ -169,9 +169,11 @@ class BaseStrategy:
         if strategy_positive:
             return keep_stocks
         elif strategy_negative:
+            print("{}: strategy negative".format(date))
             return pandas.DataFrame()
         else:
             if baseline_negative:
+                print("{}: baseline negative".format(date))
                 return pandas.DataFrame()
             else:
                 return keep_stocks
