@@ -56,7 +56,7 @@ class LocalDataManager(BaseManager):
         self.xrxd_data=filtered_xrxd_data.sort_values("ex_dividend_date").copy()
 
         baseline_start_time=(datetime.strptime(start_time, "%Y-%m-%d")-timedelta(days=365*2)).strftime("%Y-%m-%d")#取400日均线
-        self.baseline=adata.stock.market.get_market_index('000300',start_time).sort_values("trade_date")
+        self.baseline=adata.stock.market.get_market_index('000300',baseline_start_time).sort_values("trade_date")
 
         return
     
