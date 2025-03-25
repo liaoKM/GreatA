@@ -21,7 +21,7 @@ class LocalSimulator:
         
         #交易时间
         self.marketday_list=self.data_manager.get_marketday_list(self.start_time,self.end_time)
-        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time,True)
+        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time)
         self.trade=LocalTrading(self.data_manager)
         return
     
