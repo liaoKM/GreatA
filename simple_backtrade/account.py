@@ -1,21 +1,24 @@
 from .data.data_manager import LocalDataManager
 import pandas
+from .log import TradeLogger
 class SimpleAccount:
-    def __init__(self,init_money):
+    def __init__(self,init_money:int):
         self.money=init_money
         self.stocks=pandas.DataFrame(columns=['stock_code','num'],dtype=(str,int)).set_index('stock_code')
         self.buyin_price=pandas.DataFrame(columns=['stock_code','price'],dtype=(str,float)).set_index('stock_code')
         self.profit=pandas.DataFrame(columns=['stock_code','profit'],dtype=(str,float)).set_index('stock_code')
         return
     
-    def estimate_asset(self,data_manager:LocalDataManager,date):
+    def estimate_asset(self,data_manager:LocalDataManager,date,logger:TradeLogger=None):
         asset=self.money
         if self.stocks.empty==False:
             asset+=(self.stocks['num']*self.buyin_price['price']).sum()
         print("{0}:{1}元".format(date,asset))
+        if logger is not None:
+            logger.log_asset(date,asset)
         return asset
     
-    def sell_all(self,data_manager:LocalDataManager,date:str):
+    def sell_all(self,data_manager:LocalDataManager,date:str,logger:TradeLogger=None):
         if self.stocks.empty:
             return
         
@@ -24,7 +27,12 @@ class SimpleAccount:
 
         self.money+=(price*self.stocks.loc[success_index,'num']).sum()
         profit=(price-self.buyin_price.loc[success_index,'price'])*self.stocks.loc[success_index,'num']
+        profit=profit.reindex(self.stocks.index,fill_value=0)
         self.profit=self.profit['profit'].add(profit,fill_value=0).to_frame('profit')
+
+        #T日卖出，T-1交易日买入，记录为T日持仓，盈利记录为T日盈利
+        if logger is not None:
+            logger.log_holdings(date,self.stocks['num'],profit,self.profit.loc[self.stocks.index,'profit'])
 
         self.stocks=self.stocks.drop(success_index,axis='index')
         self.buyin_price=self.buyin_price.drop(success_index,axis='index')

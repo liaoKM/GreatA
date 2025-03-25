@@ -17,7 +17,7 @@ class BaseStrategy:
         if use_cached_data:
             data_types={'index':str,'stock_code':str}
             try:
-                self.stock_factors=pandas.read_csv("./cached_fractors.csv",dtype=data_types,index_col='index')
+                self.stock_factors=pandas.read_csv("./cached_fractors{}.csv".format(init_time),dtype=data_types,index_col='index')
             except:
                 pass
         
@@ -31,7 +31,7 @@ class BaseStrategy:
                         self._update_fractor(stock_code,init_time,history_score)
             if use_cached_data:
                 self.stock_factors.index.name='index'
-                self.stock_factors.to_csv("./cached_fractors.csv")
+                self.stock_factors.to_csv("./cached_fractors{}.csv".format(init_time))
         
         return
     
@@ -50,7 +50,7 @@ class BaseStrategy:
             asset_per_share=report.net_asset_ps
 
         if np.isnan(profit_per_share) or np.isnan(asset_per_share):
-            print("stock {}: missing net_asset_ps or non_gaap_eps".format(report.stock_code))
+            print("stock {}: missing net_asset_ps or non_gaap_eps".format(stock_code))
             return
         if profit_per_share<0:
             #wtf? roe为正，实际亏损？？why??
@@ -89,7 +89,7 @@ class BaseStrategy:
 
         if np.isnan(profit_grow):
             #calc profit grow manually
-            print("stock {}: missing profit_yoy_gr data".format(report.stock_code))
+            print("stock {}: missing profit_yoy_gr data".format(stock_code))
             return False
         if np.isnan(roe):
             #print("stock {}: missing roe data".format(report.stock_code))
@@ -164,9 +164,11 @@ class BaseStrategy:
         low_estimat=self.stock_factors[self.stock_factors['pe']<35]
         rising_low=low_estimat[low_estimat['rising']==True]
         keep_stocks=rising_low.sort_values(by='pe').head(keeps_num)
-        strategy_negative=(len(rising_low)/len(low_estimat)<0.2)
+        strategy_negative=(len(rising_low)/len(low_estimat)<0.3)
         strategy_positive=(len(rising_low)/len(low_estimat)>0.6)
         if strategy_positive:
+            if baseline_negative:
+                print("{}: baseline negative strategy positive".format(date))
             return keep_stocks
         elif strategy_negative:
             print("{}: strategy negative".format(date))
@@ -188,7 +190,7 @@ class BaseStrategy:
         if dataframe is None:
             return
 
-        for stock_code in dataframe['stock_code'].unique():
+        for stock_code in dataframe.index:
             if stock_code in self.stock_factors:
                 self.stock_factors.drop(index=stock_code)
             if self._check_recent_finance_report(stock_code,date):

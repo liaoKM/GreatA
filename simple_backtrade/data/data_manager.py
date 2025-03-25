@@ -51,9 +51,9 @@ class LocalDataManager(BaseManager):
         if len(stocks)>0:
             filtered_finance_data=filtered_finance_data[filtered_finance_data['stock_code'].isin(stocks)]
             filtered_market_data=filtered_market_data[filtered_market_data['stock_code'].isin(stocks)]
-        self.finance_data=filtered_finance_data.sort_values("notice_date").copy()
-        self.market_data=filtered_market_data.sort_values("trade_date").copy().set_index('stock_code')
-        self.xrxd_data=filtered_xrxd_data.sort_values("ex_dividend_date").copy()
+        self.finance_data=filtered_finance_data.sort_values("notice_date").set_index('stock_code')
+        self.market_data=filtered_market_data.sort_values("trade_date").set_index('stock_code')
+        self.xrxd_data=filtered_xrxd_data.set_index('ex_dividend_date').sort_index()
 
         baseline_start_time=(datetime.strptime(start_time, "%Y-%m-%d")-timedelta(days=365*2)).strftime("%Y-%m-%d")#取400日均线
         self.baseline=adata.stock.market.get_market_index('000300',baseline_start_time).sort_values("trade_date")
@@ -63,6 +63,10 @@ class LocalDataManager(BaseManager):
     def get_recent_baseline(self,date,count=1):
         self.baseline[self.baseline['trade_date']<=date].tail(count)
         return self.baseline[self.baseline['trade_date']<=date].tail(count)
+    
+    def get_baseline(self,start_time,end_time):
+        dataframe=self.baseline[(self.baseline['trade_date']<=end_time)&(self.baseline['trade_date']>=start_time)]
+        return dataframe
     
     def get_daily_market_data(self,date,stocks=[])->pandas.DataFrame:
         if len(stocks)>0:
@@ -85,22 +89,29 @@ class LocalDataManager(BaseManager):
         return data_frames.tail(count)
     
     def get_recent_finance_data(self,now_date,stock_code,count=1,report_type:FinanceReportType=FinanceReportType.ANY)->pandas.DataFrame:
+        finance_data=self.finance_data.loc[stock_code]
         if report_type!=FinanceReportType.ANY:
-            data_frame=self.finance_data[(self.finance_data["report_type"]==report_type.value)&(self.finance_data["stock_code"]==stock_code)&(self.finance_data["notice_date"]<=now_date)]
+            data_frame=finance_data[(finance_data["report_type"]==report_type.value)&(finance_data["notice_date"]<=now_date)]
         else:
-            data_frame=self.finance_data[(self.finance_data["stock_code"]==stock_code)&(self.finance_data["notice_date"]<=now_date)]
+            data_frame=finance_data[finance_data["notice_date"]<=now_date]
         data_frame=data_frame.sort_values(by='report_date')
         return data_frame.tail(count)
     
     def get_xrxd_data(self,start_time,end_time)->pandas.DataFrame:
         assert(start_time>=self.data_range[0] and end_time<=self.data_range[1])
-        data_frames=self.xrxd_data[(self.xrxd_data["ex_dividend_date"]<=end_time)&(self.xrxd_data["ex_dividend_date"]>=start_time)]
+        try:
+            start_pos = self.xrxd_data.index.get_loc(start_time).start
+            end_pos = self.xrxd_data.index.get_loc(end_time).stop+1
+            data_frames=self.xrxd_data.iloc[start_pos:end_pos]
+        except:
+            data_frames=self.xrxd_data.iloc[0:0]
         return data_frames
     
     def get_noticed_finance_report(self,start_time,end_time,stocks=[])->pandas.DataFrame:
         assert(start_time>=self.data_range[0] and end_time<=self.data_range[1])
         if len(stocks)>0:
-            data_frames=self.finance_data[(self.finance_data["notice_date"]<=end_time)&(self.finance_data["notice_date"]>=start_time)&(self.finance_data["stock_code"].isin(stocks))]
+            finance_data=self.finance_data.loc[stocks]
+            data_frames=finance_data[(finance_data["notice_date"]<=end_time)&(finance_data["notice_date"]>=start_time)]
         else:
             data_frames=self.finance_data[(self.finance_data["notice_date"]<=end_time)&(self.finance_data["notice_date"]>=start_time)]
 

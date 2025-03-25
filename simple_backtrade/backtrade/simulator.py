@@ -1,7 +1,7 @@
 from ..data.data_manager import LocalDataManager
 from ..account import SimpleAccount
 from .. import strategy
-from .trade import LocalTrading
+from ..log import TradeLogger
     
 import pandas
 import re
@@ -21,8 +21,8 @@ class LocalSimulator:
         
         #交易时间
         self.marketday_list=self.data_manager.get_marketday_list(self.start_time,self.end_time)
-        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time)
-        self.trade=LocalTrading(self.data_manager)
+        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time,True)
+        self.logger=TradeLogger()
         return
     
     def __XRXD(self,account:SimpleAccount,prev_date,date:str):
@@ -63,11 +63,14 @@ class LocalSimulator:
             keep_stocks=self.strategy.handle_bar(date)
             self.daily_settlement(date,list(keep_stocks.index))
             prev_date=date
+
+        self.logger.prepare_analysis(self.data_manager.get_baseline(self.start_time,self.end_time))
+        self.logger.analyze()
         return
     
     def daily_settlement(self,date:str,stock_list:list[str]):
         
-        self.account.sell_all(self.data_manager,date)
-        self.account.estimate_asset(self.data_manager,date)
+        self.account.sell_all(self.data_manager,date,self.logger)
+        self.account.estimate_asset(self.data_manager,date,self.logger)
         self.account.buyin(self.data_manager,date,stock_list)
         return
