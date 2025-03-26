@@ -12,7 +12,7 @@ def update(start_year:int,end_year:int,cache_path="./stock_data",parallel=True,c
         request_finance_data(parallel=parallel)
     
     if clean==True or os.path.exists(os.path.join(cache_path,'all_XRXD_data.csv'))==False:
-        request_xrxd_data()
+        request_xrxd_data(parallel=parallel)
     
     request_list=[]
     if clean==True:
@@ -78,14 +78,32 @@ def request_market_data(year:int,cache_path="./stock_data"):
     pandas.concat(market_data_list).to_csv(os.path.join(cache_path,'market_data_{0}.csv'.format(year)),index=False)    
     return
 
-def request_xrxd_data(cache_path="./stock_data"):
-    all_stocks=adata.stock.info.all_code()
+def request_xrxd_data_internal(stock_list:list[str]):
     xrxd_data:list[pandas.DataFrame]=[]
-    for stock in all_stocks.itertuples():
+    for stock_code in stock_list:
         try:
-            data=adata.stock.market.get_dividend(stock.stock_code)
+            data=adata.stock.market.get_dividend(stock_code)
             xrxd_data.append(data)
         except:
             pass
-    pandas.concat(xrxd_data).to_csv(os.path.join(cache_path,'all_XRXD_data.csv'),index=False)  
+    return xrxd_data
+
+def request_xrxd_data(cache_path="./stock_data",parallel=True):
+    stocks_info=adata.stock.info.all_code()
+    stockcode_list=list(stocks_info['stock_code'])
+    param_list:list[list[str]]=[]
+    data_list=[]
+    stride=int(math.ceil(len(stocks_info)/12))
+    for i in range(0,12):
+        param_list.append(stockcode_list[i*stride:(i+1)*stride])
+
+    if parallel:
+        with Pool(len(param_list)) as p:
+            outputs=p.map(request_xrxd_data_internal,param_list)
+        for output in outputs:
+            data_list+=output
+    else:
+        for stock_list in param_list:
+            data_list+=request_xrxd_data_internal(stock_list)
+    pandas.concat(data_list,ignore_index=True).to_csv(os.path.join(cache_path,'all_XRXD_data.csv'),index=False)  
     return
