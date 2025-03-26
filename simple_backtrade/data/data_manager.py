@@ -89,7 +89,10 @@ class LocalDataManager(BaseManager):
         return data_frames.tail(count)
     
     def get_recent_finance_data(self,now_date,stock_code,count=1,report_type:FinanceReportType=FinanceReportType.ANY)->pandas.DataFrame:
-        finance_data=self.finance_data.loc[stock_code]
+        try:
+            finance_data=self.finance_data.loc[stock_code]
+        except:
+            return None
         if report_type!=FinanceReportType.ANY:
             data_frame=finance_data[(finance_data["report_type"]==report_type.value)&(finance_data["notice_date"]<=now_date)]
         else:
