@@ -150,16 +150,17 @@ class BaseStrategy:
         for stock_code in self.stock_factors.index:
             try:
                 share_price=market_data.loc[stock_code].close
-                pe=share_price/self.stock_factors.loc[stock_code]['profit_per_share']
-                if np.isnan(pe) or pe<=0:
-                    breakpoint()#error debug
-                
                 mean20=self.data_manager.get_recent_stock_market_data(stock_code,date,20)['close'].mean()
-                self.stock_factors.at[stock_code,'pe']=pe
-                self.stock_factors.at[stock_code,'rising']=(share_price>=mean20)
             except:
-                self.stock_factors.at[stock_code,'pe']=100
-                self.stock_factors.at[stock_code,'rising']=False
+                print('{} stock-{} 停牌'.format(date,stock_code))
+                share_price=1e3
+                mean20=1e9
+            pe=share_price/self.stock_factors.loc[stock_code]['profit_per_share']
+            if np.isnan(pe) or pe<=0:
+                breakpoint()#error debug
+            
+            self.stock_factors.at[stock_code,'pe']=pe
+            self.stock_factors.at[stock_code,'rising']=(share_price>=mean20)
 
         low_estimat=self.stock_factors[self.stock_factors['pe']<35]
         rising_low=low_estimat[low_estimat['rising']==True]
