@@ -30,7 +30,7 @@ class LocalSimulator:
         start_time=(datetime.strptime(prev_date, "%Y-%m-%d")+timedelta(days=1)).strftime("%Y-%m-%d")
         xrxd_datas=self.data_manager.get_xrxd_data(start_time,date)
         for index,data in xrxd_datas.iterrows():
-            if data.stock_code in account.stocks.keys():
+            if data.stock_code in account.stocks.index:
                 xr_pattern='10股转赠(.*?)股'
                 xd_pattern='10股派(.*?)元'
                 right=re.findall(xr_pattern,data.dividend_plan)
@@ -38,11 +38,11 @@ class LocalSimulator:
                 assert len(right)<=1 and len(dividend)<=1
                 if len(right)!=1 and len(dividend)!=1:
                     print("[Warning]:{0} xrxd data missing!",data.stock_code)
-                takes_num=account.stocks[data.stock_code]
+                takes_num=account.stocks.loc[data.stock_code]
                 if len(dividend)==1:
                     account.money+=int(takes_num/10)*float(dividend[0])
                 if len(right)==1:
-                    account.stocks[data.stock_code]+=int(int(takes_num/10)*float(right[0]))
+                    account.stocks.at[data.stock_code,'num']+=int(int(takes_num/10)*float(right[0]))
         return
     
     def __get_new_finance_report(self,prev_date,date)->pandas.DataFrame:
