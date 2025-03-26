@@ -124,7 +124,7 @@ class BaseStrategy:
         else:
             return 0
 
-        if profit_grows.min()<-100:
+        if profit_grows.min()<-30:
             return 0
         if profit_grows.mean()<profit_grows_threshold:
             return 0
@@ -152,7 +152,7 @@ class BaseStrategy:
                 share_price=market_data.loc[stock_code].close
                 mean20=self.data_manager.get_recent_stock_market_data(stock_code,date,20)['close'].mean()
             except:
-                print('{} stock-{} 停牌'.format(date,stock_code))
+                #print('{} stock-{} 停牌'.format(date,stock_code))
                 share_price=1e3
                 mean20=1e9
             pe=share_price/self.stock_factors.loc[stock_code]['profit_per_share']
@@ -171,9 +171,9 @@ class BaseStrategy:
             if baseline_negative:
                 print("{}: baseline negative strategy positive".format(date))
             return keep_stocks
-        elif strategy_negative:
-            print("{}: strategy negative".format(date))
-            return pandas.DataFrame()
+        # elif strategy_negative:
+        #     print("{}: strategy negative".format(date))
+        #     return pandas.DataFrame()
         else:
             if baseline_negative:
                 print("{}: baseline negative".format(date))
