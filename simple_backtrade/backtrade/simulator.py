@@ -38,7 +38,7 @@ class LocalSimulator:
                 assert len(right)<=1 and len(dividend)<=1
                 if len(right)!=1 and len(dividend)!=1:
                     print("[Warning]:{0} xrxd data missing!",data.stock_code)
-                takes_num=account.stocks.loc[data.stock_code]
+                takes_num=account.stocks.loc[data.stock_code,'num']
                 if len(dividend)==1:
                     account.money+=int(takes_num/10)*float(dividend[0])
                 if len(right)==1:
