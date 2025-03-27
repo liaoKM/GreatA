@@ -45,7 +45,7 @@ class BaseStrategy:
         return 
     
     def _check_recent_finance_report(self,stocks,date):
-        roe_threshold=20
+        roe_threshold=10
         recent_profit_gr_threshold=10
         leverage_threshold=70
 
@@ -70,13 +70,19 @@ class BaseStrategy:
         return filtered.index.get_level_values('stock_code').unique()
 
     def _get_history_score(self,stocks,date):
+        roe_threshold=10
         profit_grows_mean_threshold=10
         profit_grows_min_threshold=-30
 
 
         annual_reports=self.data_manager.get_recent_finance_data(date,stocks,3,FinanceReportType.ANNUAL).copy()
         annual_reports=annual_reports.dropna(subset='non_gaap_net_profit_yoy_gr')
-        
+        annual_reports.fillna({'roe_non_gaap_wtd':annual_reports.roe_wtd},inplace=True)
+        #roe filter
+        stock_roe_min=annual_reports.roe_non_gaap_wtd.groupby(level='stock_code').min()
+        stocks=stock_roe_min[stock_roe_min>=roe_threshold].index
+        annual_reports=annual_reports.loc[pandas.IndexSlice[:,stocks],:]
+
         #num filter
         stock_code_report_num=annual_reports.groupby(level='stock_code').size()
         stocks=stock_code_report_num[stock_code_report_num>=3].index
@@ -96,7 +102,7 @@ class BaseStrategy:
         return stock_yoy_gr_mean
     
     def handle_bar(self,date:str)->pandas.DataFrame:
-        keeps_num=30
+        keeps_num=20
 
         baseline=self.data_manager.get_recent_baseline(date,1).close.iloc[0]
         baseline_m400=self.data_manager.get_recent_baseline(date,400).close.mean()
