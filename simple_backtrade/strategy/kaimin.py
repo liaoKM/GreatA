@@ -45,10 +45,13 @@ class BaseStrategy:
     def _check_recent_finance_report(self,stocks,date):
         roe_threshold=15
         recent_profit_gr_threshold=5
+        leverage_threshold=70
 
         reports=self.data_manager.get_recent_finance_data(date,stocks,1).copy()
+        annual_reports=self.data_manager.get_recent_finance_data(date,stocks,1,FinanceReportType.ANNUAL)
         reports.fillna({'roe_non_gaap_wtd':reports.roe_wtd},inplace=True)
         reports.fillna({'non_gaap_net_profit_yoy_gr':reports.net_profit_yoy_gr},inplace=True)
+        reports.fillna({'asset_liab_ratio':annual_reports.asset_liab_ratio},inplace=True)
 
         #fix roe
         mapping={
@@ -59,7 +62,7 @@ class BaseStrategy:
         }
         reports.roe_non_gaap_wtd=reports.roe_non_gaap_wtd*reports.report_type.map(mapping)
 
-        filtered=reports[(reports['roe_non_gaap_wtd']>=roe_threshold)&(reports.non_gaap_net_profit_yoy_gr>=recent_profit_gr_threshold)]
+        filtered=reports[(reports['roe_non_gaap_wtd']>=roe_threshold)&(reports.non_gaap_net_profit_yoy_gr>=recent_profit_gr_threshold)&(reports.asset_liab_ratio<=leverage_threshold)]
         return filtered.index.get_level_values('stock_code').unique()
 
     def _get_history_score(self,stocks,date):
@@ -67,7 +70,7 @@ class BaseStrategy:
         profit_grows_min_threshold=-30
 
 
-        annual_reports=self.data_manager.get_recent_finance_data(date,stocks,4,FinanceReportType.ANNUAL).copy()
+        annual_reports=self.data_manager.get_recent_finance_data(date,stocks,3,FinanceReportType.ANNUAL).copy()
         annual_reports=annual_reports.dropna(subset='non_gaap_net_profit_yoy_gr')
         
         #num filter
@@ -110,7 +113,7 @@ class BaseStrategy:
         rising_index=share_price[share_price>=mean20].index
 
         low_estimat_pe=pe[pe<35]
-        recovering_pe=pe[(pe<32)&(share_price>=mean20)].sort_values()
+        recovering_pe=pe[(pe<35)&(share_price>=mean20)].sort_values()
         strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.3)
         strategy_positive=(len(recovering_pe)/len(low_estimat_pe)>0.6)
         if strategy_positive:
