@@ -36,18 +36,12 @@ class TradeLogger:
         self.daily_returns = self.assets_log.pct_change().fillna(0)
         
         # 获取大盘数据（假设大盘代码为'000300.SH'）
-        baseline=baseline[['trade_date','close']].set_index('trade_date')
+        baseline  = baseline.close
         self.benchmark = baseline.pct_change().fillna(0)
-
-        #date str->Datetime
-        self.assets_log.index = pandas.to_datetime(self.assets_log.index, format='%Y-%m-%d')
-        self.daily_returns.index = pandas.to_datetime(self.daily_returns.index, format='%Y-%m-%d')
-        self.benchmark.index = pandas.to_datetime(self.benchmark.index, format='%Y-%m-%d')
         
         #dataframe->Series
         self.assets_log=self.assets_log['assets']
         self.daily_returns=self.daily_returns['assets']
-        self.benchmark=self.benchmark['close']
 
         return
 

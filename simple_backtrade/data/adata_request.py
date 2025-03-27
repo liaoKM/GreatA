@@ -75,7 +75,7 @@ def request_market_data(year:int,cache_path="./stock_data"):
             if all_stocks.loc[stock_code].list_date.__class__ == datetime.date:
                 market_data=market_data[market_data['trade_date']>all_stocks.loc[stock_code].list_date.strftime("%Y-%m-%d")]
             market_data_list.append(market_data)
-    pandas.concat(market_data_list).to_csv(os.path.join(cache_path,'market_data_{0}.csv'.format(year)),index=False)    
+    pandas.concat(market_data_list,ignore_index=True).to_csv(os.path.join(cache_path,'market_data_{0}.csv'.format(year)),index=False)    
     return
 
 def request_xrxd_data_internal(stock_list:list[str]):

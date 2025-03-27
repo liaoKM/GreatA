@@ -8,12 +8,11 @@ import re
 from datetime import datetime, timedelta
 
 class LocalSimulator:
-    def __init__(self,start_time:str,end_time:str,account:SimpleAccount=None):
+    def __init__(self,_start_time:str,_end_time:str,account:SimpleAccount=None):
         self.data_manager=LocalDataManager()
-        data_start_time=(datetime.strptime(start_time, "%Y-%m-%d")-timedelta(days=30)).strftime("%Y-%m-%d")
-        self.data_manager.init_range(data_start_time,end_time)
-        self.start_time=start_time
-        self.end_time=end_time
+        self.start_time=datetime.strptime(_start_time, "%Y-%m-%d")
+        self.end_time=datetime.strptime(_end_time, "%Y-%m-%d")
+        self.data_manager.init_range(self.start_time-timedelta(days=30),self.end_time)
         if account is not None:
             self.account=account
         else:
@@ -21,13 +20,13 @@ class LocalSimulator:
         
         #交易时间
         self.marketday_list=self.data_manager.get_marketday_list(self.start_time,self.end_time)
-        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,start_time,True)
+        self.strategy=strategy.BaseStrategy(self.account,self.data_manager,self.start_time)
         self.logger=TradeLogger()
         return
     
-    def __XRXD(self,account:SimpleAccount,prev_date,date:str):
+    def __XRXD(self,account:SimpleAccount,prev_date:datetime,date:datetime):
         '''除权除息'''
-        start_time=(datetime.strptime(prev_date, "%Y-%m-%d")+timedelta(days=1)).strftime("%Y-%m-%d")
+        start_time=prev_date+timedelta(days=1)
         xrxd_datas=self.data_manager.get_xrxd_data(start_time,date)
         for index,data in xrxd_datas.iterrows():
             if data.stock_code in account.stocks.index:
@@ -45,9 +44,9 @@ class LocalSimulator:
                     account.stocks.at[data.stock_code,'num']+=int(int(takes_num/10)*float(right[0]))
         return
     
-    def __get_new_finance_report(self,prev_date,date)->pandas.DataFrame:
-        start_time=(datetime.strptime(prev_date, "%Y-%m-%d")+timedelta(days=1)).strftime("%Y-%m-%d")
-        finance_report_data=self.data_manager.get_noticed_finance_report(start_time,date)
+    def __get_new_finance_report(self,prev_date:datetime,date:datetime)->pandas.DataFrame:
+        start_time=prev_date+timedelta(days=1)
+        finance_report_data=self.data_manager.get_noticed_finance_report(start_time,date,self.data_manager.get_all_stockcode())
         return finance_report_data
     
     def set_strategy(self,strategy_class):
@@ -68,9 +67,8 @@ class LocalSimulator:
         self.logger.analyze()
         return
     
-    def daily_settlement(self,date:str,stock_list:list[str]):
-        
+    def daily_settlement(self,date:datetime,stock_list:list[str]):
         self.account.sell_all(self.data_manager,date,self.logger)
-        self.account.estimate_asset(self.data_manager,date,self.logger)
+        self.account.estimate_asset(date,self.logger)
         self.account.buyin(self.data_manager,date,stock_list)
         return

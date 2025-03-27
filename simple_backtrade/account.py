@@ -1,6 +1,9 @@
 from .data.data_manager import LocalDataManager
-import pandas
 from .log import TradeLogger
+
+import pandas
+from datetime import datetime,timedelta
+
 class SimpleAccount:
     def __init__(self,init_money:int):
         self.money=init_money
@@ -9,7 +12,7 @@ class SimpleAccount:
         self.profit=pandas.DataFrame(columns=['stock_code','profit'],dtype=(str,float)).set_index('stock_code')
         return
     
-    def estimate_asset(self,data_manager:LocalDataManager,date,logger:TradeLogger=None):
+    def estimate_asset(self,date,logger:TradeLogger=None):
         asset=self.money
         if self.stocks.empty==False:
             asset+=(self.stocks['num']*self.buyin_price['price']).sum()
@@ -18,7 +21,7 @@ class SimpleAccount:
             logger.log_asset(date,asset)
         return asset
     
-    def sell_all(self,data_manager:LocalDataManager,date:str,logger:TradeLogger=None):
+    def sell_all(self,data_manager:LocalDataManager,date:datetime,logger:TradeLogger=None):
         if self.stocks.empty:
             return
         
