@@ -26,16 +26,18 @@ class BaseStrategy:
         report=self.data_manager.get_recent_finance_data(date,stocks,1).droplevel(0).copy()
         annual_report=self.data_manager.get_recent_finance_data(date,stocks,1,FinanceReportType.ANNUAL).droplevel(0).copy()
         report.fillna({'non_gaap_eps':report.basic_eps},inplace=True)
+        annual_report.fillna({'non_gaap_eps':annual_report.basic_eps},inplace=True)
         report.fillna({'net_asset_ps':annual_report.net_asset_ps},inplace=True)
 
         #fix eps
         mapping={
-            FinanceReportType.S1.value:4.0,
-            FinanceReportType.S2.value:2.0,
-            FinanceReportType.S3.value:4.0/3.0,
+            FinanceReportType.S1.value:1.0/4.0,
+            FinanceReportType.S2.value:2.0/4.0,
+            FinanceReportType.S3.value:3.0/4.0,
             FinanceReportType.S4.value:1.0,
         }
-        report.non_gaap_eps = report.non_gaap_eps * report.report_type.map(mapping)
+        season_weight=report.report_type.map(mapping)
+        report.non_gaap_eps = report.non_gaap_eps + annual_report.non_gaap_eps * (1-season_weight)
 
         stock_factors=pandas.concat([report.non_gaap_eps,report.net_asset_ps,history_score],axis=1)
         stock_factors.columns=['profit_per_share','asset_per_share','history_score']
@@ -43,24 +45,26 @@ class BaseStrategy:
         return 
     
     def _check_recent_finance_report(self,stocks,date):
-        roe_threshold=15
-        recent_profit_gr_threshold=5
+        roe_threshold=20
+        recent_profit_gr_threshold=10
         leverage_threshold=70
 
-        reports=self.data_manager.get_recent_finance_data(date,stocks,1).copy()
-        annual_reports=self.data_manager.get_recent_finance_data(date,stocks,1,FinanceReportType.ANNUAL)
+        reports=self.data_manager.get_recent_finance_data(date,stocks,1).copy().droplevel(level='notice_date')
+        annual_reports=self.data_manager.get_recent_finance_data(date,stocks,1,FinanceReportType.ANNUAL).droplevel(level='notice_date')
         reports.fillna({'roe_non_gaap_wtd':reports.roe_wtd},inplace=True)
+        annual_reports.fillna({'roe_non_gaap_wtd':annual_reports.roe_wtd},inplace=True)
         reports.fillna({'non_gaap_net_profit_yoy_gr':reports.net_profit_yoy_gr},inplace=True)
         reports.fillna({'asset_liab_ratio':annual_reports.asset_liab_ratio},inplace=True)
 
         #fix roe
         mapping={
-            FinanceReportType.S1.value:4.0,
-            FinanceReportType.S2.value:2.0,
-            FinanceReportType.S3.value:4.0/3.0,
+            FinanceReportType.S1.value:1.0/4.0,
+            FinanceReportType.S2.value:2.0/4.0,
+            FinanceReportType.S3.value:3.0/4.0,
             FinanceReportType.S4.value:1.0,
         }
-        reports.roe_non_gaap_wtd=reports.roe_non_gaap_wtd*reports.report_type.map(mapping)
+        season_weight=reports.report_type.map(mapping)
+        reports.roe_non_gaap_wtd=reports.roe_non_gaap_wtd+annual_reports.roe_non_gaap_wtd*(1-season_weight)
 
         filtered=reports[(reports['roe_non_gaap_wtd']>=roe_threshold)&(reports.non_gaap_net_profit_yoy_gr>=recent_profit_gr_threshold)&(reports.asset_liab_ratio<=leverage_threshold)]
         return filtered.index.get_level_values('stock_code').unique()
@@ -92,7 +96,7 @@ class BaseStrategy:
         return stock_yoy_gr_mean
     
     def handle_bar(self,date:str)->pandas.DataFrame:
-        keeps_num=20
+        keeps_num=30
 
         baseline=self.data_manager.get_recent_baseline(date,1).close.iloc[0]
         baseline_m400=self.data_manager.get_recent_baseline(date,400).close.mean()
@@ -114,6 +118,8 @@ class BaseStrategy:
 
         low_estimat_pe=pe[pe<35]
         recovering_pe=pe[(pe<35)&(share_price>=mean20)].sort_values()
+        #recovering_pe=recovering_pe/self.stock_factors.loc[recovering_pe.index].history_score
+
         strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.3)
         strategy_positive=(len(recovering_pe)/len(low_estimat_pe)>0.6)
         if strategy_positive:
