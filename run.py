@@ -10,12 +10,8 @@ def task(year):
 
 
 if __name__=='__main__':
-    #debug
-    #2019-04-25
-    #600681
-    #10 +4shares +5yuan
-    #13.78->9.08
     simple_backtrade.adata_request.update(2008,2016)
     param_list=[2017,2018,2019,2020,2021,2022,2023,2024]
     with Pool(len(param_list)) as p:
         p.map(task,param_list)
+    # task(2019)

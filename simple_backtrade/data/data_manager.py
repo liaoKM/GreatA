@@ -77,7 +77,10 @@ class LocalDataManager(BaseManager):
     
     def get_daily_market_data(self,date,stocks=[])->pandas.DataFrame:
         valid_stocks=self.market_data.index.get_level_values('stock_code').unique().intersection(stocks)
-        market_data=self.market_data.loc[Idx[date,valid_stocks],:]
+        try:
+            market_data=self.market_data.loc[Idx[date,valid_stocks],:]
+        except:
+            market_data=self.market_data.iloc[0:0]
         return market_data.droplevel('trade_date')
     
     
