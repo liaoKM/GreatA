@@ -130,7 +130,7 @@ class BaseStrategy:
         predict_pe=pe/(1.0+self.stock_factors.history_score/100)
         #predict_pe=pe
 
-        if baseline_negative:
+        # if baseline_negative:
             # low_estimat_pe=predict_pe[predict_pe<25]
             # recovering_pe=predict_pe[(predict_pe<25)&(share_price>=mean20)].sort_values()
             # strategy_positive=(len(predict_pe[(predict_pe<25)&(share_price>=mean10)])/len(low_estimat_pe)>0.7)
@@ -138,12 +138,12 @@ class BaseStrategy:
             #     print("{}: baseline negative strategy positive".format(date))
             # else:
             #     print("{}: baseline negative".format(date))
-                return pandas.DataFrame()
+            #    return pandas.DataFrame()
 
-        else:
-            low_estimat_pe=predict_pe[predict_pe<25]
-            recovering_pe=predict_pe[(predict_pe<25)&(share_price>=mean20)].sort_values()
-            strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.3)
+        # else:
+        low_estimat_pe=predict_pe[predict_pe<25]
+        recovering_pe=predict_pe[(predict_pe<25)&(share_price>=mean20)].sort_values()
+        strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.3)
 
         return recovering_pe.head(keeps_num)
     
