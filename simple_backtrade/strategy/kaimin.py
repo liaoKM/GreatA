@@ -104,12 +104,16 @@ class BaseStrategy:
 
         return stock_yoy_gr_mean
     
-    def handle_bar(self,date:str)->pandas.DataFrame:
+    def handle_bar(self,date:datetime)->pandas.DataFrame:
         keeps_num=20
 
-        baseline=self.data_manager.get_recent_baseline(date,1).close.iloc[0]
-        baseline_m400=self.data_manager.get_recent_baseline(date,200).close.mean()
-        baseline_negative=(baseline<baseline_m400)
+        baseline=self.data_manager.get_recent_baseline(date,1).close.mean()
+        m60_t1=self.data_manager.get_recent_baseline(date-timedelta(days=1),60).close.mean()
+        m60_t0=self.data_manager.get_recent_baseline(date-timedelta(days=0),60).close.mean()
+        # baseline_m40=self.data_manager.get_recent_baseline(date,40).close.mean()
+        baseline_negative=(m60_t1>m60_t0 and m60_t0>baseline)
+        if baseline_negative:
+             return pandas.DataFrame()
 
 
         market_data=self.data_manager.get_daily_market_data(date,self.stock_factors.index)

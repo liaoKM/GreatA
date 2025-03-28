@@ -83,6 +83,7 @@ class TradeLogger:
 
         # 添加指标文本（使用相对坐标定位）
         text_content = f"""
+        年化收益率(%): {analysis['年化收益率(%)']:.2f}
         夏普比率: {analysis['日夏普比率']:.2f}
         最大回撤(%): {analysis['最大回撤(%)']:.2f}
         月胜率(%): {analysis['月胜率(%)']:.2f}
