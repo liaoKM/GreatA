@@ -52,7 +52,9 @@ class BaseStrategy:
         reports=self.data_manager.get_recent_finance_data(date,stocks,1).copy().droplevel(level='notice_date')
         annual_reports=self.data_manager.get_recent_finance_data(date,stocks,1,FinanceReportType.ANNUAL).droplevel(level='notice_date')
         reports.fillna({'roe_non_gaap_wtd':reports.roe_wtd},inplace=True)
+        reports["roe_non_gaap_wtd"] = reports.roe_non_gaap_wtd.where(reports.roe_non_gaap_wtd != 0, reports.roe_wtd)
         annual_reports.fillna({'roe_non_gaap_wtd':annual_reports.roe_wtd},inplace=True)
+        annual_reports["roe_non_gaap_wtd"] = annual_reports.roe_non_gaap_wtd.where(annual_reports.roe_non_gaap_wtd != 0, annual_reports.roe_wtd)
         reports.fillna({'non_gaap_net_profit_yoy_gr':reports.net_profit_yoy_gr},inplace=True)
         reports.fillna({'asset_liab_ratio':annual_reports.asset_liab_ratio},inplace=True)
 
@@ -78,6 +80,7 @@ class BaseStrategy:
         annual_reports=self.data_manager.get_recent_finance_data(date,stocks,3,FinanceReportType.ANNUAL).copy()
         annual_reports=annual_reports.dropna(subset='non_gaap_net_profit_yoy_gr')
         annual_reports.fillna({'roe_non_gaap_wtd':annual_reports.roe_wtd},inplace=True)
+        annual_reports["roe_non_gaap_wtd"] = annual_reports.roe_non_gaap_wtd.where(annual_reports.roe_non_gaap_wtd != 0, annual_reports.roe_wtd)
         #roe filter
         stock_roe_min=annual_reports.roe_non_gaap_wtd.groupby(level='stock_code').min()
         stocks=stock_roe_min[stock_roe_min>=roe_threshold].index
@@ -105,7 +108,7 @@ class BaseStrategy:
         keeps_num=20
 
         baseline=self.data_manager.get_recent_baseline(date,1).close.iloc[0]
-        baseline_m400=self.data_manager.get_recent_baseline(date,400).close.mean()
+        baseline_m400=self.data_manager.get_recent_baseline(date,200).close.mean()
         baseline_negative=(baseline<baseline_m400)
 
 
@@ -116,31 +119,32 @@ class BaseStrategy:
         
         valid_stock=self.stock_factors.index.intersection(market_data.index)
         share_price=market_data.loc[valid_stock].close
-        mean20=self.data_manager.get_recent_stock_market_data(valid_stock,date,20)['close'].groupby(level='stock_code').mean()
+        history_price=self.data_manager.get_recent_stock_market_data(valid_stock,date,20)['close']
+        mean20=history_price.groupby(level='stock_code').mean()
+        mean10=history_price.groupby(level='stock_code').tail(10).groupby(level='stock_code').mean()
         share_price=share_price.reindex(self.stock_factors.index,fill_value=1e3)
         mean20=mean20.reindex(self.stock_factors.index,fill_value=1e9)
+        mean10=mean10.reindex(self.stock_factors.index,fill_value=1e9)
         pe=share_price/self.stock_factors['profit_per_share']
-        rising_index=share_price[share_price>=mean20].index
 
-        low_estimat_pe=pe[pe<25]
-        recovering_pe=pe[(pe<25)&(share_price>=mean20)].sort_values()
-        recovering_pe=(recovering_pe/self.stock_factors.loc[recovering_pe.index].history_score).sort_values()
+        predict_pe=pe/(1.0+self.stock_factors.history_score/100)
+        #predict_pe=pe
 
-        strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.3)
-        strategy_positive=(len(recovering_pe)/len(low_estimat_pe)>0.6)
-        if strategy_positive:
-            if baseline_negative:
-                print("{}: baseline negative strategy positive".format(date))
-            return recovering_pe.head(keeps_num)
-        elif strategy_negative:
-            print("{}: strategy negative".format(date))
-            return pandas.DataFrame()
-        else:
-            if baseline_negative:
-                print("{}: baseline negative".format(date))
+        if baseline_negative:
+            # low_estimat_pe=predict_pe[predict_pe<25]
+            # recovering_pe=predict_pe[(predict_pe<25)&(share_price>=mean20)].sort_values()
+            # strategy_positive=(len(predict_pe[(predict_pe<25)&(share_price>=mean10)])/len(low_estimat_pe)>0.7)
+            # if strategy_positive:
+            #     print("{}: baseline negative strategy positive".format(date))
+            # else:
+            #     print("{}: baseline negative".format(date))
                 return pandas.DataFrame()
-            else:
-                return recovering_pe.head(keeps_num)
+
+        else:
+            low_estimat_pe=predict_pe[predict_pe<25]
+            recovering_pe=predict_pe[(predict_pe<25)&(share_price>=mean20)].sort_values()
+            strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.3)
+
         return recovering_pe.head(keeps_num)
     
     def handle_report(self,date:str,dataframe:pandas.DataFrame):

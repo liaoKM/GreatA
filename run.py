@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import simple_backtrade
 from multiprocessing import Pool
+import numpy as np
 
 def task(year):
     start_time='{}-01-01'.format(year)
@@ -10,8 +11,8 @@ def task(year):
 
 
 if __name__=='__main__':
-    simple_backtrade.adata_request.update(2008,2016)
-    param_list=[2017,2018,2019,2020,2021,2022,2023,2024]
+    # simple_backtrade.adata_request.update(2025,2025)
+    param_list=list(np.arange(2008,2026))
     with Pool(len(param_list)) as p:
         p.map(task,param_list)
-    # task(2019)
+    # task(2010)
