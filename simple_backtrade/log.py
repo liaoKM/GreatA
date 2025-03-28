@@ -51,7 +51,8 @@ class TradeLogger:
             raise ValueError("请先调用prepare_analysis加载基准数据")
 
         analysis = {
-            '累计收益(%)': self._cumulative_returns().iloc[-1]*100,
+            'daily_returns': self.daily_returns,
+            'benchmark':self.benchmark,
             '年化收益率(%)': self._annualized_return(),
             '日夏普比率': self._sharpe_ratio(),
             '最大回撤(%)': self._max_drawdown(),
@@ -63,11 +64,13 @@ class TradeLogger:
         }
 
         #save
-        start_time=self.assets_log.index[0].strftime("%Y-%m-%d")
-        end_time=self.assets_log.index[-1].strftime("%Y-%m-%d")
+        start_time=self.daily_returns.index[0].strftime("%Y-%m-%d")
+        end_time=self.daily_returns.index[-1].strftime("%Y-%m-%d")
         
-        self.holdings_log.to_csv("./results/{}_{}_holding_log.csv".format(start_time,end_time))
-        self.assets_log.to_csv("./results/{}_{}_assets_log.csv".format(start_time,end_time))
+        if self.holdings_log.empty==False:
+            self.holdings_log.to_csv("./results/{}_{}_holding_log.csv".format(start_time,end_time))
+        if self.assets_log.empty==False:
+            self.assets_log.to_csv("./results/{}_{}_assets_log.csv".format(start_time,end_time))
 
         #plot
         plt.rcParams["font.family"] = "Microsoft YaHei"

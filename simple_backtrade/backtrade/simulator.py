@@ -64,8 +64,8 @@ class LocalSimulator:
             prev_date=date
 
         self.logger.prepare_analysis(self.data_manager.get_baseline(self.start_time,self.end_time))
-        self.logger.analyze()
-        return
+        analyze_result=self.logger.analyze()
+        return analyze_result
     
     def daily_settlement(self,date:datetime,stock_list:list[str]):
         self.account.sell_all(self.data_manager,date,self.logger)
