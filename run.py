@@ -14,11 +14,11 @@ def task(year):
 
 
 if __name__=='__main__':
-    #simple_backtrade.adata_request.update(2007,2025)
+    # simple_backtrade.adata_request.update(2007,2025)
     param_list=list(np.arange(2008,2026))
     with Pool(len(param_list)) as p:
         analyze_results=p.map(task,param_list)
-    #task(2008)
+    # task(2008)
     
     daily_returns=pandas.concat([analyze_result['daily_returns'] for analyze_result in analyze_results])
     benchmark=pandas.concat([analyze_result['benchmark'] for analyze_result in analyze_results])
