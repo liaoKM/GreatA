@@ -12,7 +12,7 @@ class LocalSimulator:
         self.data_manager=LocalDataManager()
         self.start_time=datetime.strptime(_start_time, "%Y-%m-%d")
         self.end_time=datetime.strptime(_end_time, "%Y-%m-%d")
-        self.data_manager.init_range(self.start_time-timedelta(days=30),self.end_time)
+        self.data_manager.init_range(self.start_time-timedelta(days=100),self.end_time)
         if account is not None:
             self.account=account
         else:

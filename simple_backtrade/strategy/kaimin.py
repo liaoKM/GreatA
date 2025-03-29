@@ -107,13 +107,12 @@ class BaseStrategy:
     def handle_bar(self,date:datetime)->pandas.DataFrame:
         keeps_num=20
 
-        baseline=self.data_manager.get_recent_baseline(date,1).close.mean()
-        m60_t1=self.data_manager.get_recent_baseline(date-timedelta(days=1),60).close.mean()
-        m60_t0=self.data_manager.get_recent_baseline(date-timedelta(days=0),60).close.mean()
-        # baseline_m40=self.data_manager.get_recent_baseline(date,40).close.mean()
-        baseline_negative=(m60_t1>m60_t0 and m60_t0>baseline)
-        if baseline_negative:
-             return pandas.DataFrame()
+        baseline_data=self.data_manager.get_recent_baseline(date,60).close
+        baseline=baseline_data.tail(1).iloc[0]
+        m30=baseline_data.tail(30).mean()
+        m60=baseline_data.tail(60).mean()
+
+        baseline_negative=(m60>m30 and m30>baseline)
 
 
         market_data=self.data_manager.get_daily_market_data(date,self.stock_factors.index)
@@ -123,12 +122,12 @@ class BaseStrategy:
         
         valid_stock=self.stock_factors.index.intersection(market_data.index)
         share_price=market_data.loc[valid_stock].close
-        history_price=self.data_manager.get_recent_stock_market_data(valid_stock,date,20)['close']
-        mean20=history_price.groupby(level='stock_code').mean()
-        mean10=history_price.groupby(level='stock_code').tail(10).groupby(level='stock_code').mean()
+        history_price=self.data_manager.get_recent_stock_market_data(valid_stock,date,60+1)['close']
+        m60_t0=history_price.groupby(level='stock_code').tail(60).groupby(level='stock_code').mean()
+        m60_t1=history_price.groupby(level='stock_code').head(60).groupby(level='stock_code').mean()
         share_price=share_price.reindex(self.stock_factors.index,fill_value=1e3)
-        mean20=mean20.reindex(self.stock_factors.index,fill_value=1e9)
-        mean10=mean10.reindex(self.stock_factors.index,fill_value=1e9)
+        m60_t1=m60_t1.reindex(self.stock_factors.index,fill_value=1e9)
+        m60_t0=m60_t0.reindex(self.stock_factors.index,fill_value=1e9)
         pe=share_price/self.stock_factors['profit_per_share']
 
         predict_pe=pe/(1.0+self.stock_factors.history_score/100)
@@ -146,8 +145,17 @@ class BaseStrategy:
 
         # else:
         low_estimat_pe=predict_pe[predict_pe<25]
-        recovering_pe=predict_pe[(predict_pe<25)&(share_price>=mean20)].sort_values()
-        strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.3)
+        recovering_pe=predict_pe[(predict_pe<25)&(~((share_price<=m60_t0)&(m60_t1>=m60_t0)))].sort_values()
+        strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.2)
+        strategy_positive=(len(recovering_pe)/len(low_estimat_pe)>0.7)
+
+        if baseline_negative:
+            if strategy_positive:
+                pass
+            else:
+                return pandas.DataFrame()
+        if strategy_negative:
+            return pandas.DataFrame()
 
         return recovering_pe.head(keeps_num)
     
