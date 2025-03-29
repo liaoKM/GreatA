@@ -113,8 +113,9 @@ class BaseStrategy:
         base_m20_t0=baseline_data.iloc[-1-20:-1].mean()
         base_m60_t1=baseline_data.head(60).mean()
         base_m60_t0=baseline_data.tail(60).mean()
-
         baseline_negative=(base_m60_t0>base_m20_t0 and base_m20_t0>baseline and base_m20_t1>base_m20_t0 and base_m60_t1>base_m60_t0)
+        if baseline_negative:
+            return pandas.DataFrame()
 
 
         market_data=self.data_manager.get_daily_market_data(date,self.stock_factors.index)
@@ -140,18 +141,8 @@ class BaseStrategy:
         predict_pe=pe/(1.0+self.stock_factors.history_score/100)
         #predict_pe=pe
 
-        low_estimat_pe=predict_pe[predict_pe<25]
-        recovering_pe=predict_pe[(predict_pe<25)&((m60_t1<m60_t0)&(m60_t0<share_price))].sort_values()
-        strategy_negative=(len(recovering_pe)/len(low_estimat_pe)<0.2)
-        strategy_positive=(len(recovering_pe)/len(low_estimat_pe)>0.7)
-
-        if baseline_negative:
-            if strategy_positive:
-                pass
-            else:
-                return pandas.DataFrame()
-        if strategy_negative:
-            return pandas.DataFrame()
+        low_estimat_pe=predict_pe[predict_pe<30]
+        recovering_pe=predict_pe[(predict_pe<30)&((m60_t1<m60_t0)&(m20_t1<m20_t0)&(m60_t0<m20_t0))].sort_values()
 
         return recovering_pe.head(keeps_num)
     
