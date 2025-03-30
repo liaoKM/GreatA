@@ -6,7 +6,7 @@ import numpy as np
 import datetime
 import math
 
-def update(start_year:int,end_year:int,cache_path="./stock_data",parallel=True,clean=False):
+def update(start_year:int,end_year:int,cache_path="./stock_data",parallel=False,clean=False):
     
     if clean==True or os.path.exists(os.path.join(cache_path,'all_finance_data.csv'))==False:
         request_finance_data(parallel=parallel)
