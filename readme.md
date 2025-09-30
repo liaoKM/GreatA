@@ -1,5 +1,5 @@
 # 癌(A)股财务指标低频策略
-![alt text](./results/2014-01-02_2025-09-30_graph.png)
+![alt text](results/2014-01-02_2025-09-30_graph.png)
 
 ## 开始
 
