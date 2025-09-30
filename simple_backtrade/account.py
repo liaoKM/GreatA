@@ -1,4 +1,4 @@
-from .data.data_manager import LocalDataManager
+from .data.data_manager import DataManager
 from .log import TradeLogger
 
 import pandas
@@ -21,11 +21,11 @@ class SimpleAccount:
             logger.log_asset(date,asset)
         return asset
     
-    def sell_all(self,data_manager:LocalDataManager,date:datetime,logger:TradeLogger=None):
+    def sell_all(self,data_manager:DataManager,date:datetime,logger:TradeLogger=None):
         if self.stocks.empty:
             return
         
-        price=data_manager.get_daily_market_data(date,self.stocks.index).close
+        price=data_manager.market_data.loc[date].loc[self.stocks.index].close
         success_index=price.index
 
         self.money+=(price*self.stocks.loc[success_index,'num']).sum()
@@ -44,14 +44,14 @@ class SimpleAccount:
             print("sell all fail! #remain:{}".format(len(self.stocks)))
         return
     
-    def buyin(self,data_manager:LocalDataManager,date:str,stock_list:list[str]):
-        if len(stock_list)==0:
+    def buyin(self,data_manager:DataManager,date:datetime,stocks:pandas.Index):
+        if stocks.empty:
             return
         
-        avg_money=self.money*min(1/len(stock_list),0.1)
-        market_data=data_manager.get_daily_market_data(date,stock_list)
+        avg_money=self.money*min(1/len(stocks),0.05)
+        market_data=data_manager.market_data.loc[date].loc[stocks]
 
-        price=market_data.loc[stock_list].close
+        price=market_data.close
         num=(avg_money/price).round(-2).astype(int)
         self.money-=((num*price).sum())
         self.buyin_price=self.buyin_price._append(price.to_frame('price'))

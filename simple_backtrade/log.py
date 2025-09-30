@@ -1,7 +1,7 @@
 import pandas
 import numpy as np
 import matplotlib.pyplot as plt
-from .data.data_manager import LocalDataManager
+from .data.data_manager import DataManager
 class TradeLogger:
     def __init__(self):
         # 持仓日志 {日期: {股票代码: 数量}}
