@@ -1,5 +1,5 @@
 from ..data.data_manager import LocalDataManager
-from ..data.base_manager import FinanceReportType
+from ..data.data_manager import FinanceReportType
 from ..account import SimpleAccount
 
 import pandas

@@ -1,1 +1,2 @@
-from .kaimin import BaseStrategy
+from .base import BaseStrategy
+from .xt_kaimin import MyStrategy
