@@ -8,13 +8,19 @@ import datetime
 
 def task(year):
     start_time='{}-01-01'.format(year)
-    end_time='{}-12-31'.format(year)
+    if year==2025:
+        end_time='2025-10-31'
+    else:
+        end_time='{}-12-31'.format(year)
     simulator=simple_backtrade.backtrade.LocalSimulator(start_time,end_time,None)
     analyze_result=simulator.start()
     return analyze_result
 
 
 if __name__=='__main__':
+
+    # simulator=simple_backtrade.backtrade.LocalSimulator('2025-01-01','2025-10-31',None)
+    # analyze_result=simulator.start()
 
     analyze_results=[]
     for i in range(2014,2026):

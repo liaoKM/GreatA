@@ -40,7 +40,7 @@ class XtDataDownloader(DataDownloader):
         return not out_of_date
     
     def download(self,date:datetime.datetime):
-        #self._download_rawdata()
+        self._download_rawdata()
         self._rawdata_to_pandas(None,date)
         self.market_data.to_parquet(os.path.join(self.output_path,self.market_file_format.format(date.strftime(self.date_fromat))))
         self.finance_data.to_csv(os.path.join(self.output_path,self.finance_file_format.format(date.strftime(self.date_fromat))))
@@ -58,6 +58,8 @@ class XtDataDownloader(DataDownloader):
         xtdata.download_index_weight()
 
         stocks = xtdata.get_stock_list_in_sector('沪深京A股')
+        # hk_stocks = xtdata.get_stock_list_in_sector('香港联交所股票')
+        # stocks+=hk_stocks
         stocks.append('000300.SH')
         self.stocks=stocks
         
@@ -68,7 +70,7 @@ class XtDataDownloader(DataDownloader):
         progress=tqdm.tqdm(self.stocks)
         progress.set_description("Downloading")
         for s in progress:
-            xtdata.download_history_data(s, '1d', '', '')
+            xtdata.download_history_data(s, '1d', '', '',incrementally=True)
         return
     
     def _rawdata_to_pandas(self,start_time:datetime.datetime,end_time=datetime.datetime):

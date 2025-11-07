@@ -38,8 +38,8 @@ class MyStrategy(BaseStrategy):
         num=3
 
         stocks=self.data.annual_finance_data.index.get_level_values('stock_code').intersection(stocks)
-        annual_reports=self.data.annual_finance_data.loc[stocks,:]
-        annual_reports=annual_reports[annual_reports.m_anntime<start_time]
+        annual_reports:pandas.DataFrame=self.data.annual_finance_data.loc[stocks,:]
+        annual_reports=annual_reports[annual_reports.m_anntime<=start_time]
         annual_reports=annual_reports.groupby(level='stock_code').tail(num)
 
         #num filter
@@ -56,12 +56,19 @@ class MyStrategy(BaseStrategy):
         stock_yoy_gr_min=annual_reports.adjusted_net_profit_rate.groupby(level='stock_code').min()
         stocks=stock_yoy_gr_min[stock_yoy_gr_min>=profit_grows_min_threshold].index
         annual_reports=annual_reports.loc[stocks,:]
+
+        stock_yoy_gr_max=annual_reports.adjusted_net_profit_rate.groupby(level='stock_code').max()
+        stocks=stock_yoy_gr_max[stock_yoy_gr_max<=150].index#150%增长视为异常
+        annual_reports=annual_reports.loc[stocks,:]
+
         #increase filter
         decrease_num=(annual_reports.adjusted_net_profit_rate<0).groupby(level='stock_code').sum()
         stocks=decrease_num[decrease_num<=0].index
         annual_reports=annual_reports.loc[stocks,:]
+
         #mean filter
-        stock_yoy_gr_mean=(annual_reports.adjusted_net_profit_rate.groupby(level='stock_code').sum()-annual_reports.adjusted_net_profit_rate.groupby(level='stock_code').max())/(num-1)
+        #stock_yoy_gr_mean=(annual_reports.adjusted_net_profit_rate.groupby(level='stock_code').sum()-annual_reports.adjusted_net_profit_rate.groupby(level='stock_code').max())/(num-1)
+        stock_yoy_gr_mean=annual_reports.adjusted_net_profit_rate.groupby(level='stock_code').apply(lambda x:(x*[0.1,0.3,0.6]).sum(axis=0))
         stock_yoy_gr_mean=stock_yoy_gr_mean[stock_yoy_gr_mean>=profit_grows_mean_threshold]
 
         return stock_yoy_gr_mean
@@ -73,8 +80,8 @@ class MyStrategy(BaseStrategy):
 
         report=self.data.finance_data.loc[stocks,:].copy()
         annual_report=self.data.annual_finance_data.loc[stocks,:]
-        report=report[(report.m_anntime)<date].groupby(level='stock_code').tail(1)
-        annual_report=annual_report[(annual_report.m_anntime)<date].groupby(level='stock_code').last()
+        report=report[(report.m_anntime)<=date].groupby(level='stock_code').tail(1)
+        annual_report=annual_report[(annual_report.m_anntime)<=date].groupby(level='stock_code').last()
         mapping={
             3:1.0/4.0,
             6:2.0/4.0,
@@ -120,8 +127,14 @@ class MyStrategy(BaseStrategy):
         pe=share_price/self.stock_factors['profit_per_share']
         predict_pe=pe/((1.0+self.stock_factors.history_profit_growth_rate/100)*(1.0+self.stock_factors.history_profit_growth_rate/100))#预测两年后pe
         low_estimat_pe=predict_pe[predict_pe<20]
-        recovering_pe=predict_pe[(predict_pe<20)&(share_price>=mean20)].sort_values()
-        return recovering_pe.head(20)
+        recovering_pe=predict_pe[(predict_pe<20)&(share_price>=mean20)&(self.stock_factors.history_profit_growth_rate>10)].sort_values()
+
+        if date==datetime(2025,10,31):
+            output_data=pandas.concat([pe,predict_pe,self.stock_factors.history_profit_growth_rate],axis=1)
+            output_data.columns=["pe","predict_pe","growth_avg"]
+            output_data=output_data.sort_values('predict_pe')
+            output_data.to_csv("./latest_socre.csv")
+        return recovering_pe.head(10)
 
     
     def handle_report(self,date:datetime,new_report_stocks:pandas.Index)->None:

@@ -54,16 +54,16 @@ class LocalSimulator:
         self.strategy.handle_report(prev_date,self.stocks)
 
         for date in self.marketday_list:
+            #新财报 发布日盘前刷新
+            new_report_stocks=self.data_manager.finance_data[(self.data_manager.finance_data.m_anntime>prev_date)&(self.data_manager.finance_data.m_anntime<=date)].index.get_level_values('stock_code').unique()
+            self.strategy.handle_report(date,new_report_stocks)
+            
             #分红送股
             self.__XRXD(self.account,prev_date,date)
 
             #K线更新
             keep_stocks=self.strategy.handle_bar(date)
             self.daily_settlement(date,keep_stocks.index)
-
-            #新财报
-            new_report_stocks=self.data_manager.finance_data[(self.data_manager.finance_data.m_anntime>prev_date)&(self.data_manager.finance_data.m_anntime<=date)].index.get_level_values('stock_code').unique()
-            self.strategy.handle_report(date,new_report_stocks)
 
             prev_date=date
 

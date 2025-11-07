@@ -48,7 +48,7 @@ class SimpleAccount:
         if stocks.empty:
             return
         
-        avg_money=self.money*min(1/len(stocks),0.05)
+        avg_money=self.money*min(1/len(stocks),0.1)
         market_data=data_manager.market_data.loc[date].loc[stocks]
 
         price=market_data.close
