@@ -191,7 +191,7 @@ def aggregate_type(data_type: str, year: int = None, month: int = None, force: b
         # 自动聚合
         # 1. 先聚合去年及之前的完整年份
         last_year = today.year - 1
-        for y in range(last_year, last_year - 3, -1):  # 检查最近3年
+        for y in range(last_year, last_year - 50, -1):  # 检查最近50年
             aggregate_yearly(aggregator, y, force=False)
 
         # 2. 聚合上月及之前的完整月份
