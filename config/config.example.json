@@ -1,0 +1,7 @@
+{
+    "Comments":"Rename config.example.json to config.json!!",
+    "tokens": {
+        "tushare": "your_tushare_token_here",
+        "akshare": ""
+    }
+}
