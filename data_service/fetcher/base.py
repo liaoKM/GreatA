@@ -55,8 +55,6 @@ class BaseFetcher(ABC):
         Returns:
             保存的文件路径
         """
-        if df is None or df.empty:
-            return None
 
         filename = f"{date.strftime('%Y-%m-%d')}.parquet"
         filepath = self.daily_path / filename

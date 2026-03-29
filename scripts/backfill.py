@@ -168,7 +168,7 @@ def backfill_market(start_date: datetime, end_date: datetime):
             print(f"      拉取 {month_key}...")
             df = fetcher.fetch_history(actual_month_start, actual_month_end)
 
-            if df is not None and not df.empty:
+            if df is not None:
                 # 判断保存方式
                 if is_full_month:
                     filepath = fetcher.monthly_path / f"{month_key}.parquet"
@@ -230,7 +230,7 @@ def backfill_finance(start_date: datetime, end_date: datetime):
             print(f"    拉取 {month_key}...")
             df = fetcher.fetch_history(actual_month_start, actual_month_end)
 
-            if df is not None and not df.empty:
+            if df is not None:
                 if is_full_month:
                     # 完整月份，保存到 monthly/ 目录
                     filepath = fetcher.monthly_path / f"{month_key}.parquet"
@@ -248,64 +248,122 @@ def backfill_finance(start_date: datetime, end_date: datetime):
     print(f"  财报数据回填完成，共 {total_count} 条")
 
 
+def get_existing_periods_for_type(fetcher, ann_type: str) -> dict:
+    """
+    获取指定公告类型已有的数据文件
+
+    Args:
+        fetcher: 数据拉取器
+        ann_type: 公告类型
+
+    Returns:
+        dict: {'yearly': set(), 'monthly': set(), 'daily': set()}
+    """
+    existing = {
+        'yearly': set(),
+        'monthly': set(),
+        'daily': set()
+    }
+
+    if ann_type not in fetcher.type_paths:
+        return existing
+
+    paths = fetcher.type_paths[ann_type]
+
+    # 检查年度文件
+    for f in paths['yearly'].glob('*.parquet'):
+        if len(f.stem) == 4 and f.stem.isdigit():
+            existing['yearly'].add(int(f.stem))
+
+    # 检查月度文件
+    for f in paths['monthly'].glob('*.parquet'):
+        if len(f.stem) == 7:
+            try:
+                datetime.strptime(f.stem, '%Y-%m')
+                existing['monthly'].add(f.stem)
+            except ValueError:
+                pass
+
+    # 检查日度文件
+    for f in paths['daily'].glob('*.parquet'):
+        if len(f.stem) == 10:
+            try:
+                datetime.strptime(f.stem, '%Y-%m-%d')
+                existing['daily'].add(f.stem)
+            except ValueError:
+                pass
+
+    return existing
+
+
 def backfill_announcement(start_date: datetime, end_date: datetime):
     """回填公告数据"""
+    from data_service.fetcher.announcement_fetcher import ANNOUNCEMENT_TYPES
+
     print(f"  回填公告数据 ({start_date.date()} ~ {end_date.date()})...")
     fetcher = TushareAnnouncementFetcher()
-    existing = get_existing_periods(fetcher)
-
-    start_year = start_date.year
-    end_year = end_date.year
 
     total_count = 0
-    for year in range(start_year, end_year + 1):
-        if year in existing['yearly']:
-            print(f"    跳过 {year} 年（已存在）")
-            continue
 
-        year_start = datetime(year, 1, 1)
-        year_end = datetime(year, 12, 31)
-        actual_start = max(start_date, year_start)
-        actual_end = min(end_date, year_end)
+    # 按公告类型分别处理
+    for ann_type, type_name in ANNOUNCEMENT_TYPES.items():
+        print(f"    处理 {type_name} ({ann_type})...")
 
-        for month in range(1, 13):
-            month_start = datetime(year, month, 1)
-            if month == 12:
-                month_end = datetime(year, 12, 31)
-            else:
-                month_end = datetime(year, month + 1, 1) - timedelta(days=1)
+        existing = get_existing_periods_for_type(fetcher, ann_type)
 
-            if month_end < actual_start or month_start > actual_end:
+        start_year = start_date.year
+        end_year = end_date.year
+
+        type_count = 0
+        for year in range(start_year, end_year + 1):
+            if year in existing['yearly']:
+                print(f"      跳过 {year} 年（已存在）")
                 continue
 
-            month_key = f"{year}-{month:02d}"
-            if month_key in existing['monthly']:
-                print(f"    跳过 {month_key}（已存在）")
-                continue
+            year_start = datetime(year, 1, 1)
+            year_end = datetime(year, 12, 31)
+            actual_start = max(start_date, year_start)
+            actual_end = min(end_date, year_end)
 
-            actual_month_start = max(actual_start, month_start)
-            actual_month_end = min(actual_end, month_end)
-
-            # 判断是否是完整月份
-            is_full_month = (actual_month_start == month_start and actual_month_end == month_end)
-
-            print(f"    拉取 {month_key}...")
-            df = fetcher.fetch_history(actual_month_start, actual_month_end)
-
-            if df is not None and not df.empty:
-                if is_full_month:
-                    # 完整月份，保存到 monthly/ 目录
-                    filepath = fetcher.monthly_path / f"{month_key}.parquet"
-                    df.to_parquet(filepath, index=False)
-                    print(f"    保存: {filepath} ({len(df)} 条)")
+            for month in range(1, 13):
+                month_start = datetime(year, month, 1)
+                if month == 12:
+                    month_end = datetime(year, 12, 31)
                 else:
-                    # 零散日期，按日保存
-                    for ann_date in df['ann_date'].unique():
-                        daily_df = df[df['ann_date'] == ann_date]
-                        dt = pd.to_datetime(ann_date)
-                        fetcher.save_daily(daily_df, dt)
-                    print(f"    保存 {len(df)} 条日数据")
-                total_count += len(df)
+                    month_end = datetime(year, month + 1, 1) - timedelta(days=1)
+
+                if month_end < actual_start or month_start > actual_end:
+                    continue
+
+                month_key = f"{year}-{month:02d}"
+                if month_key in existing['monthly']:
+                    continue
+
+                actual_month_start = max(actual_start, month_start)
+                actual_month_end = min(actual_end, month_end)
+
+                # 判断是否是完整月份
+                is_full_month = (actual_month_start == month_start and actual_month_end == month_end)
+
+                print(f"      拉取 {month_key}...")
+                df = fetcher.fetch_history_by_type(ann_type, actual_month_start, actual_month_end)
+
+                if df is not None:
+                    if is_full_month:
+                        # 完整月份，保存到 monthly/ 目录
+                        filepath = fetcher.save_monthly_by_type(df, ann_type, year, month)
+                        print(f"      保存: {filepath} ({len(df)} 条)")
+                    else:
+                        # 零散日期，按日保存
+                        for ann_date in df['ann_date'].unique():
+                            daily_df = df[df['ann_date'] == ann_date]
+                            dt = pd.to_datetime(ann_date)
+                            fetcher.save_daily_by_type(daily_df, ann_type, dt)
+                        print(f"      保存 {len(df)} 条日数据")
+                    type_count += len(df)
+
+        print(f"    {type_name}完成，共 {type_count} 条")
+        total_count += type_count
 
     print(f"  公告数据回填完成，共 {total_count} 条")
 
