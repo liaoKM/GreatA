@@ -1,8 +1,10 @@
 """Tushare 财报数据拉取器"""
 from datetime import datetime
+import time
 import pandas as pd
 import tushare as ts
 from ..finance_fetcher import FinanceFetcher
+from config.settings import get_token
 
 
 class TushareFinanceFetcher(FinanceFetcher):
@@ -10,6 +12,8 @@ class TushareFinanceFetcher(FinanceFetcher):
 
     def __init__(self, token: str = None, data_path: str = './data'):
         super().__init__(data_path)
+        if token is None:
+            token = get_token('tushare')
         self.pro = ts.pro_api(token)
 
     def fetch_daily(self, date: datetime) -> pd.DataFrame:
@@ -24,8 +28,8 @@ class TushareFinanceFetcher(FinanceFetcher):
         """
         ann_date = date.strftime('%Y%m%d')
 
-        # 获取财务指标数据
-        df = self.pro.fina_indicator(ann_date=ann_date)
+        # 使用 fina_indicator_vip 接口，支持 ann_date 参数查询所有股票
+        df = self.pro.fina_indicator_vip(ann_date=ann_date)
 
         if df is None or df.empty:
             return pd.DataFrame()
@@ -42,31 +46,32 @@ class TushareFinanceFetcher(FinanceFetcher):
 
     def fetch_history(self, start: datetime, end: datetime) -> pd.DataFrame:
         """
-        拉取历史财报数据
+        拉取历史财报数据（按公告日期范围）
 
         Args:
-            start: 开始日期
-            end: 结束日期
+            start: 开始日期（公告日期）
+            end: 结束日期（公告日期）
 
         Returns:
-            DataFrame包含时间范围内所有财报
+            DataFrame包含公告日期在时间范围内所有财报
         """
-        start_date = start.strftime('%Y%m%d')
-        end_date = end.strftime('%Y%m%d')
+        # fina_indicator_vip 的 ann_date 参数只支持单日查询
+        # 需要遍历日期范围内的每一天
+        all_dfs = []
+        current = start
 
-        df = self.pro.fina_indicator(start_date=start_date, end_date=end_date)
+        while current <= end:
+            df = self.fetch_daily(current)
+            time.sleep(0.12)
+            if df is not None and not df.empty:
+                all_dfs.append(df)
+            current = datetime(current.year, current.month, current.day) + pd.Timedelta(days=1)
 
-        if df is None or df.empty:
+        if not all_dfs:
             return pd.DataFrame()
 
-        df = df.rename(columns={
-            'ts_code': 'stock_code',
-        })
-
-        df['ann_date'] = pd.to_datetime(df['ann_date'])
-        df['end_date'] = pd.to_datetime(df['end_date'])
-
-        return df
+        result = pd.concat(all_dfs, ignore_index=True)
+        return result
 
     def fetch_by_report_period(self, period: str) -> pd.DataFrame:
         """
@@ -78,7 +83,8 @@ class TushareFinanceFetcher(FinanceFetcher):
         Returns:
             DataFrame包含该报告期所有财报
         """
-        df = self.pro.fina_indicator(end_date=period)
+        # 使用 fina_indicator_vip 接口
+        df = self.pro.fina_indicator_vip(end_date=period)
 
         if df is None or df.empty:
             return pd.DataFrame()

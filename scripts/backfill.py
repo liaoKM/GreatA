@@ -224,16 +224,25 @@ def backfill_finance(start_date: datetime, end_date: datetime):
             actual_month_start = max(actual_start, month_start)
             actual_month_end = min(actual_end, month_end)
 
+            # 判断是否是完整月份
+            is_full_month = (actual_month_start == month_start and actual_month_end == month_end)
+
             print(f"    拉取 {month_key}...")
             df = fetcher.fetch_history(actual_month_start, actual_month_end)
 
             if df is not None and not df.empty:
-                # 按公告日期保存
-                for ann_date in df['ann_date'].unique():
-                    daily_df = df[df['ann_date'] == ann_date]
-                    dt = pd.to_datetime(ann_date)
-                    fetcher.save_daily(daily_df, dt)
-                print(f"    保存 {len(df)} 条")
+                if is_full_month:
+                    # 完整月份，保存到 monthly/ 目录
+                    filepath = fetcher.monthly_path / f"{month_key}.parquet"
+                    df.to_parquet(filepath, index=False)
+                    print(f"    保存: {filepath} ({len(df)} 条)")
+                else:
+                    # 零散日期，按日保存
+                    for ann_date in df['ann_date'].unique():
+                        daily_df = df[df['ann_date'] == ann_date]
+                        dt = pd.to_datetime(ann_date)
+                        fetcher.save_daily(daily_df, dt)
+                    print(f"    保存 {len(df)} 条日数据")
                 total_count += len(df)
 
     print(f"  财报数据回填完成，共 {total_count} 条")
@@ -277,15 +286,25 @@ def backfill_announcement(start_date: datetime, end_date: datetime):
             actual_month_start = max(actual_start, month_start)
             actual_month_end = min(actual_end, month_end)
 
+            # 判断是否是完整月份
+            is_full_month = (actual_month_start == month_start and actual_month_end == month_end)
+
             print(f"    拉取 {month_key}...")
             df = fetcher.fetch_history(actual_month_start, actual_month_end)
 
             if df is not None and not df.empty:
-                for ann_date in df['ann_date'].unique():
-                    daily_df = df[df['ann_date'] == ann_date]
-                    dt = pd.to_datetime(ann_date)
-                    fetcher.save_daily(daily_df, dt)
-                print(f"    保存 {len(df)} 条")
+                if is_full_month:
+                    # 完整月份，保存到 monthly/ 目录
+                    filepath = fetcher.monthly_path / f"{month_key}.parquet"
+                    df.to_parquet(filepath, index=False)
+                    print(f"    保存: {filepath} ({len(df)} 条)")
+                else:
+                    # 零散日期，按日保存
+                    for ann_date in df['ann_date'].unique():
+                        daily_df = df[df['ann_date'] == ann_date]
+                        dt = pd.to_datetime(ann_date)
+                        fetcher.save_daily(daily_df, dt)
+                    print(f"    保存 {len(df)} 条日数据")
                 total_count += len(df)
 
     print(f"  公告数据回填完成，共 {total_count} 条")
