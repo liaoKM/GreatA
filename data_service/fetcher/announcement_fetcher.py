@@ -12,7 +12,7 @@ ANNOUNCEMENT_TYPES = {
     'express': '业绩快报',
     'repurchase': '股票回购',
     'holdertrade': '股东增减持',
-    'broker_forecast': '券商预测',
+    #'broker_forecast': '券商预测',
 }
 
 
@@ -24,8 +24,7 @@ class AnnouncementFetcher(BaseFetcher):
     ├── forecast/daily/, monthly/, yearly/
     ├── express/daily/, monthly/, yearly/
     ├── repurchase/daily/, monthly/, yearly/
-    ├── holdertrade/daily/, monthly/, yearly/
-    └── broker_forecast/daily/, monthly/, yearly/
+    └── holdertrade/daily/, monthly/, yearly/
     """
 
     DATA_TYPE = 'announcement'
@@ -53,7 +52,7 @@ class AnnouncementFetcher(BaseFetcher):
         拉取指定类型的单日公告数据
 
         Args:
-            ann_type: 公告类型 (forecast/express/repurchase/holdertrade/broker_forecast)
+            ann_type: 公告类型 (forecast/express/repurchase/holdertrade)
             date: 公告日期
 
         Returns:

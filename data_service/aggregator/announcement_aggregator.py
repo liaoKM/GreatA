@@ -1,67 +1,130 @@
-"""公告数据整合器"""
+"""Announcement data aggregation."""
+
+from __future__ import annotations
+
 from pathlib import Path
+
 import pandas as pd
+
 from .base import BaseAggregator
+from ..fetcher.announcement_fetcher import ANNOUNCEMENT_TYPES
 
 
 class AnnouncementAggregator(BaseAggregator):
-    """公告数据整合器"""
+    """Aggregate announcement parquet files by subtype."""
 
-    DATA_TYPE = 'announcement'
+    DATA_TYPE = "announcement"
 
-    def aggregate_daily_to_monthly(self, year: int, month: int) -> Path:
-        """
-        将当月所有公告数据合并为月文件
+    def __init__(self, data_path: str = "./data"):
+        self.data_path = Path(data_path)
+        self.type_paths: dict[str, dict[str, Path]] = {}
+        for ann_type in ANNOUNCEMENT_TYPES:
+            type_path = self.data_path / self.DATA_TYPE / ann_type
+            self.type_paths[ann_type] = {
+                "daily": type_path / "daily",
+                "monthly": type_path / "monthly",
+                "yearly": type_path / "yearly",
+            }
+        self.daily_path = self.data_path / self.DATA_TYPE / "_daily"
+        self.monthly_path = self.data_path / self.DATA_TYPE / "_monthly"
+        self.yearly_path = self.data_path / self.DATA_TYPE / "_yearly"
 
-        Args:
-            year: 年份
-            month: 月份
+    def _load_daily_files(self, year: int, month: int) -> list[Path]:
+        all_files: list[Path] = []
+        for ann_type in ANNOUNCEMENT_TYPES:
+            pattern = f"{year}-{month:02d}-*.parquet"
+            all_files.extend(self.type_paths[ann_type]["daily"].glob(pattern))
+        return sorted(all_files)
 
-        Returns:
-            生成的monthly文件路径
-        """
-        daily_files = self._load_daily_files(year, month)
-        if not daily_files:
-            return None
+    def _load_monthly_files(self, year: int) -> list[Path]:
+        all_files: list[Path] = []
+        for ann_type in ANNOUNCEMENT_TYPES:
+            pattern = f"{year}-*.parquet"
+            all_files.extend(self.type_paths[ann_type]["monthly"].glob(pattern))
+        return sorted(all_files)
 
-        # 合并所有daily文件
-        dfs = [pd.read_parquet(f) for f in daily_files]
-        merged_df = pd.concat(dfs, ignore_index=True)
+    def monthly_file_exists(self, year: int, month: int) -> bool:
+        return all(
+            (self.type_paths[ann_type]["monthly"] / f"{year}-{month:02d}.parquet").exists()
+            for ann_type in ANNOUNCEMENT_TYPES
+        )
 
-        # 保存为monthly文件
-        filename = f"{year}-{month:02d}.parquet"
-        filepath = self.monthly_path / filename
+    def yearly_file_exists(self, year: int) -> bool:
+        return all(
+            (self.type_paths[ann_type]["yearly"] / f"{year}.parquet").exists()
+            for ann_type in ANNOUNCEMENT_TYPES
+        )
+
+    def aggregate_daily_to_monthly(
+        self,
+        year: int,
+        month: int,
+        ann_type: str | None = None,
+    ) -> dict[str, Path] | Path:
+        if ann_type is not None:
+            return self._aggregate_daily_to_monthly_by_type(ann_type, year, month)
+
+        result: dict[str, Path] = {}
+        for current_type in ANNOUNCEMENT_TYPES:
+            result[current_type] = self._aggregate_daily_to_monthly_by_type(current_type, year, month)
+        return result
+
+    def _aggregate_daily_to_monthly_by_type(self, ann_type: str, year: int, month: int) -> Path:
+        paths = self.type_paths[ann_type]
+        pattern = f"{year}-{month:02d}-*.parquet"
+        daily_files = sorted(paths["daily"].glob(pattern))
+
+        merged_df = self._concat_parquet_files(daily_files)
+        merged_df = self._deduplicate(ann_type, merged_df)
+
+        filepath = paths["monthly"] / f"{year}-{month:02d}.parquet"
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         merged_df.to_parquet(filepath, index=False)
 
-        # 删除daily文件
-        self._delete_daily_files(year, month)
+        for file_path in daily_files:
+            file_path.unlink()
 
         return filepath
 
-    def aggregate_monthly_to_yearly(self, year: int) -> Path:
-        """
-        将当年所有公告数据合并为年文件
+    def aggregate_monthly_to_yearly(
+        self,
+        year: int,
+        ann_type: str | None = None,
+    ) -> dict[str, Path] | Path | None:
+        if ann_type is not None:
+            return self._aggregate_monthly_to_yearly_by_type(ann_type, year)
 
-        Args:
-            year: 年份
+        result: dict[str, Path] = {}
+        for current_type in ANNOUNCEMENT_TYPES:
+            yearly_path = self._aggregate_monthly_to_yearly_by_type(current_type, year)
+            if yearly_path is not None:
+                result[current_type] = yearly_path
+        return result
 
-        Returns:
-            生成的yearly文件路径
-        """
-        monthly_files = self._load_monthly_files(year)
+    def _aggregate_monthly_to_yearly_by_type(self, ann_type: str, year: int) -> Path | None:
+        paths = self.type_paths[ann_type]
+        pattern = f"{year}-*.parquet"
+        monthly_files = sorted(paths["monthly"].glob(pattern))
         if not monthly_files:
             return None
 
-        # 合并所有monthly文件
-        dfs = [pd.read_parquet(f) for f in monthly_files]
-        merged_df = pd.concat(dfs, ignore_index=True)
+        merged_df = self._concat_parquet_files(monthly_files)
+        merged_df = self._deduplicate(ann_type, merged_df)
 
-        # 保存为yearly文件
-        filename = f"{year}.parquet"
-        filepath = self.yearly_path / filename
+        filepath = paths["yearly"] / f"{year}.parquet"
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         merged_df.to_parquet(filepath, index=False)
 
-        # 删除monthly文件
-        self._delete_monthly_files(year)
+        for file_path in monthly_files:
+            file_path.unlink()
 
         return filepath
+
+    def _deduplicate(self, ann_type: str, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            return df
+        if ann_type in {"forecast", "express"}:
+            return self._deduplicate_by_latest(df, ["stock_code", "end_date"])
+        if ann_type in {"repurchase", "holdertrade"}:
+            return self._drop_exact_duplicates(df)
+        return df

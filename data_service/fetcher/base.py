@@ -58,6 +58,7 @@ class BaseFetcher(ABC):
 
         filename = f"{date.strftime('%Y-%m-%d')}.parquet"
         filepath = self.daily_path / filename
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(filepath, index=False)
         return filepath
 

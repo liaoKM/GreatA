@@ -26,6 +26,120 @@ import pandas as pd
 from data_service import (
     TushareMarketFetcher, TushareFinanceFetcher, TushareAnnouncementFetcher
 )
+from data_service.fetch_status import read_fetch_status, write_fetch_status
+from data_service.fetcher.announcement_fetcher import ANNOUNCEMENT_TYPES
+
+
+def _write_status(data_path: Path, data_type: str, target_date: datetime, row_count: int,
+                  extra: dict = None):
+    payload = {
+        'data_type': data_type,
+        'target_date': target_date.date().isoformat(),
+        'fetched_at': datetime.now().isoformat(timespec='seconds'),
+        'status': 'success' if row_count > 0 else 'empty',
+        'row_count': int(row_count),
+    }
+    if extra:
+        payload.update(extra)
+    write_fetch_status(data_path, data_type, target_date, payload)
+
+
+def _write_market_daily_statuses(fetcher, start: datetime, end: datetime, df: pd.DataFrame):
+    """为市场散日回补写入状态文件。"""
+    trade_dates = get_trade_dates_in_range(fetcher, start, end)
+    if not trade_dates:
+        return
+
+    grouped = {}
+    if df is not None and not df.empty and 'trade_date' in df.columns:
+        normalized = df.copy()
+        normalized['trade_date'] = pd.to_datetime(normalized['trade_date'])
+        grouped = {
+            trade_date.date(): len(group_df)
+            for trade_date, group_df in normalized.groupby('trade_date')
+        }
+
+    for trade_date in trade_dates:
+        dt = datetime.strptime(trade_date, '%Y%m%d')
+        _write_status(fetcher.data_path, 'market', dt, grouped.get(dt.date(), 0))
+
+
+def _write_finance_daily_statuses(fetcher, start: datetime, end: datetime, df: pd.DataFrame):
+    """为财报散日回补写入状态文件，包括空结果日期。"""
+    grouped = {}
+    if df is not None and not df.empty and 'ann_date' in df.columns:
+        normalized = df.copy()
+        normalized['ann_date'] = pd.to_datetime(normalized['ann_date'])
+        grouped = {
+            ann_date.date(): len(group_df)
+            for ann_date, group_df in normalized.groupby('ann_date')
+        }
+
+    current = start
+    while current <= end:
+        _write_status(fetcher.data_path, 'finance', current, grouped.get(current.date(), 0))
+        current += timedelta(days=1)
+
+
+def _write_announcement_daily_statuses(fetcher, ann_type: str, start: datetime, end: datetime, df: pd.DataFrame):
+    """为公告散日回补写入状态文件，按子类型合并到同一个日状态里。"""
+    grouped = {}
+    if df is not None and not df.empty and 'ann_date' in df.columns:
+        normalized = df.copy()
+        normalized['ann_date'] = pd.to_datetime(normalized['ann_date'])
+        grouped = {
+            ann_date.date(): len(group_df)
+            for ann_date, group_df in normalized.groupby('ann_date')
+        }
+
+    current = start
+    while current <= end:
+        payload = read_fetch_status(fetcher.data_path, 'announcement', current) or {
+            'data_type': 'announcement',
+            'target_date': current.date().isoformat(),
+            'fetched_at': datetime.now().isoformat(timespec='seconds'),
+            'status': 'empty',
+            'row_count': 0,
+            'types': {},
+        }
+
+        row_count = grouped.get(current.date(), 0)
+        payload.setdefault('types', {})
+        payload['types'][ann_type] = {
+            'status': 'success' if row_count > 0 else 'empty',
+            'row_count': int(row_count),
+        }
+        payload['row_count'] = sum(item.get('row_count', 0) for item in payload['types'].values())
+
+        type_statuses = [item.get('status') for item in payload['types'].values()]
+        if any(status == 'error' for status in type_statuses):
+            payload['status'] = 'error'
+        elif any(status == 'success' for status in type_statuses):
+            payload['status'] = 'success'
+        else:
+            payload['status'] = 'empty'
+
+        payload['fetched_at'] = datetime.now().isoformat(timespec='seconds')
+        write_fetch_status(fetcher.data_path, 'announcement', current, payload)
+        current += timedelta(days=1)
+
+
+def _has_valid_daily_status(data_path: Path, data_type: str, target_date: datetime) -> bool:
+    payload = read_fetch_status(data_path, data_type, target_date)
+    if not payload:
+        return False
+    return payload.get('status') in {'success', 'empty'}
+
+
+def _has_valid_announcement_type_status(data_path: Path, ann_type: str, target_date: datetime) -> bool:
+    payload = read_fetch_status(data_path, 'announcement', target_date)
+    if not payload:
+        return False
+
+    type_payload = payload.get('types', {}).get(ann_type)
+    if not isinstance(type_payload, dict):
+        return False
+    return type_payload.get('status') in {'success', 'empty'}
 
 
 def get_existing_periods(fetcher) -> dict:
@@ -63,8 +177,9 @@ def get_existing_periods(fetcher) -> dict:
     for f in fetcher.daily_path.glob('*.parquet'):
         if len(f.stem) == 10:
             try:
-                datetime.strptime(f.stem, '%Y-%m-%d')
-                existing['daily'].add(f.stem)
+                dt = datetime.strptime(f.stem, '%Y-%m-%d')
+                if _has_valid_daily_status(fetcher.data_path, fetcher.DATA_TYPE, dt):
+                    existing['daily'].add(f.stem)
             except ValueError:
                 pass
 
@@ -179,6 +294,7 @@ def backfill_market(start_date: datetime, end_date: datetime):
                     for trade_date in df['trade_date'].unique():
                         daily_df = df[df['trade_date'] == trade_date]
                         fetcher.save_daily(daily_df, trade_date)
+                    _write_market_daily_statuses(fetcher, actual_month_start, actual_month_end, df)
                     print(f"      保存 {len(df)} 条日数据")
 
     print("  市场数据回填完成!")
@@ -242,6 +358,7 @@ def backfill_finance(start_date: datetime, end_date: datetime):
                         daily_df = df[df['ann_date'] == ann_date]
                         dt = pd.to_datetime(ann_date)
                         fetcher.save_daily(daily_df, dt)
+                    _write_finance_daily_statuses(fetcher, actual_month_start, actual_month_end, df)
                     print(f"    保存 {len(df)} 条日数据")
                 total_count += len(df)
 
@@ -288,8 +405,9 @@ def get_existing_periods_for_type(fetcher, ann_type: str) -> dict:
     for f in paths['daily'].glob('*.parquet'):
         if len(f.stem) == 10:
             try:
-                datetime.strptime(f.stem, '%Y-%m-%d')
-                existing['daily'].add(f.stem)
+                dt = datetime.strptime(f.stem, '%Y-%m-%d')
+                if _has_valid_announcement_type_status(fetcher.data_path, ann_type, dt):
+                    existing['daily'].add(f.stem)
             except ValueError:
                 pass
 
@@ -298,8 +416,6 @@ def get_existing_periods_for_type(fetcher, ann_type: str) -> dict:
 
 def backfill_announcement(start_date: datetime, end_date: datetime):
     """回填公告数据"""
-    from data_service.fetcher.announcement_fetcher import ANNOUNCEMENT_TYPES
-
     print(f"  回填公告数据 ({start_date.date()} ~ {end_date.date()})...")
     fetcher = TushareAnnouncementFetcher()
 
@@ -359,6 +475,9 @@ def backfill_announcement(start_date: datetime, end_date: datetime):
                             daily_df = df[df['ann_date'] == ann_date]
                             dt = pd.to_datetime(ann_date)
                             fetcher.save_daily_by_type(daily_df, ann_type, dt)
+                        _write_announcement_daily_statuses(
+                            fetcher, ann_type, actual_month_start, actual_month_end, df
+                        )
                         print(f"      保存 {len(df)} 条日数据")
                     type_count += len(df)
 
