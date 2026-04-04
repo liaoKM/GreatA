@@ -5,6 +5,8 @@ from .benchmark import (
     CustomIndexConfig,
     CustomIndexEngine,
     FinanceGrowthIndexStrategy,
+    REGISTERED_CUSTOM_BENCHMARKS,
+    build_registered_custom_benchmark,
     run_custom_index,
 )
 from .config import BacktestConfig
@@ -34,6 +36,7 @@ __all__ = [
     "CustomIndexConfig",
     "CustomIndexEngine",
     "FinanceGrowthIndexStrategy",
+    "REGISTERED_CUSTOM_BENCHMARKS",
     "EmptyStrategy",
     "ExposureBucket",
     "InstrumentSpec",
@@ -43,6 +46,7 @@ __all__ = [
     "PublishedEvent",
     "TargetPortfolio",
     "TradeTiming",
+    "build_registered_custom_benchmark",
     "run_custom_index",
     "run_backtest",
 ]

@@ -34,7 +34,7 @@ class BacktestConfig:
     trade_timing: TradeTiming = TradeTiming.CLOSE
     price_adjustment: PriceAdjustment = PriceAdjustment.HFQ
     warmup_bars: int = 60
-    benchmark: pd.Series | BenchmarkProvider | None = None
+    benchmark: str | pd.Series | BenchmarkProvider | None = None
 
     def __post_init__(self) -> None:
         self.start = _normalize_date(self.start)

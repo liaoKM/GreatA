@@ -117,6 +117,8 @@ class BacktestEngine:
         benchmark = getattr(self.config, "benchmark", None)
         if benchmark is None:
             return None
+        if isinstance(benchmark, str):
+            return self.data_portal.benchmark.get_series(benchmark, sessions=sessions)
         if hasattr(benchmark, "get_series"):
             return benchmark.get_series(sessions)
         series = pd.Series(benchmark).copy()

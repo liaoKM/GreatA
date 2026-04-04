@@ -1,6 +1,13 @@
-"""Tushare 数据源实现"""
-from .market_fetcher import TushareMarketFetcher
-from .finance_fetcher import TushareFinanceFetcher
-from .announcement_fetcher import TushareAnnouncementFetcher
+"""Tushare data source implementations."""
 
-__all__ = ['TushareMarketFetcher', 'TushareFinanceFetcher', 'TushareAnnouncementFetcher']
+from .announcement_fetcher import TushareAnnouncementFetcher
+from .benchmark_fetcher import TushareBenchmarkFetcher
+from .finance_fetcher import TushareFinanceFetcher
+from .market_fetcher import TushareMarketFetcher
+
+__all__ = [
+    "TushareBenchmarkFetcher",
+    "TushareMarketFetcher",
+    "TushareFinanceFetcher",
+    "TushareAnnouncementFetcher",
+]

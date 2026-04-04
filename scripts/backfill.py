@@ -24,7 +24,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 from data_service import (
-    TushareMarketFetcher, TushareFinanceFetcher, TushareAnnouncementFetcher
+    TushareBenchmarkFetcher, TushareMarketFetcher, TushareFinanceFetcher, TushareAnnouncementFetcher
+)
+from data_service.benchmark_storage import (
+    OFFICIAL_TUSHARE_BENCHMARK_IDS,
+    get_existing_benchmark_periods,
+    iter_benchmark_partitions,
 )
 from data_service.fetch_status import read_fetch_status, write_fetch_status
 from data_service.fetcher.announcement_fetcher import ANNOUNCEMENT_TYPES
@@ -122,6 +127,52 @@ def _write_announcement_daily_statuses(fetcher, ann_type: str, start: datetime, 
         payload['fetched_at'] = datetime.now().isoformat(timespec='seconds')
         write_fetch_status(fetcher.data_path, 'announcement', current, payload)
         current += timedelta(days=1)
+
+
+def _write_benchmark_daily_statuses(fetcher, benchmark_id: str, start: datetime, end: datetime, df: pd.DataFrame):
+    """Write benchmark fetch status files for each trade day in one range."""
+    trade_dates = get_trade_dates_in_range(fetcher, start, end)
+    if not trade_dates:
+        return
+
+    grouped = {}
+    if df is not None and not df.empty and 'trade_date' in df.columns:
+        normalized = df.copy()
+        normalized['trade_date'] = pd.to_datetime(normalized['trade_date'])
+        grouped = {
+            trade_date.date(): len(group_df)
+            for trade_date, group_df in normalized.groupby('trade_date')
+        }
+
+    for trade_date in trade_dates:
+        current = datetime.strptime(trade_date, '%Y%m%d')
+        payload = read_fetch_status(fetcher.data_path, 'benchmark', current) or {
+            'data_type': 'benchmark',
+            'target_date': current.date().isoformat(),
+            'fetched_at': datetime.now().isoformat(timespec='seconds'),
+            'status': 'empty',
+            'row_count': 0,
+            'benchmarks': {},
+        }
+
+        row_count = grouped.get(current.date(), 0)
+        payload.setdefault('benchmarks', {})
+        payload['benchmarks'][benchmark_id] = {
+            'status': 'success' if row_count > 0 else 'empty',
+            'row_count': int(row_count),
+        }
+        payload['row_count'] = sum(item.get('row_count', 0) for item in payload['benchmarks'].values())
+
+        statuses = [item.get('status') for item in payload['benchmarks'].values()]
+        if any(status == 'error' for status in statuses):
+            payload['status'] = 'error'
+        elif any(status == 'success' for status in statuses):
+            payload['status'] = 'success'
+        else:
+            payload['status'] = 'empty'
+
+        payload['fetched_at'] = datetime.now().isoformat(timespec='seconds')
+        write_fetch_status(fetcher.data_path, 'benchmark', current, payload)
 
 
 def _has_valid_daily_status(data_path: Path, data_type: str, target_date: datetime) -> bool:
@@ -487,6 +538,53 @@ def backfill_announcement(start_date: datetime, end_date: datetime):
     print(f"  公告数据回填完成，共 {total_count} 条")
 
 
+def backfill_benchmark(start_date: datetime, end_date: datetime):
+    """Backfill persisted benchmark data."""
+    print(f"  Backfilling benchmark data ({start_date.date()} ~ {end_date.date()})...")
+    fetcher = TushareBenchmarkFetcher()
+
+    for benchmark_id in OFFICIAL_TUSHARE_BENCHMARK_IDS:
+        existing = get_existing_benchmark_periods(fetcher.data_path, benchmark_id)
+        benchmark_count = 0
+
+        print(f"    Processing {benchmark_id}...")
+        for partition in iter_benchmark_partitions(start_date, end_date):
+            if partition.level == 'yearly' and partition.start.year in existing['yearly']:
+                continue
+            if partition.level == 'monthly' and partition.key in existing['monthly']:
+                continue
+            if partition.level == 'daily' and partition.key in existing['daily']:
+                continue
+
+            df = fetcher.fetch_history_by_id(benchmark_id, partition.start, partition.end)
+            if df is None or df.empty:
+                continue
+
+            if partition.level == 'yearly':
+                path = fetcher.save_yearly(df, benchmark_id, partition.start.year)
+                existing['yearly'].add(partition.start.year)
+            elif partition.level == 'monthly':
+                path = fetcher.save_monthly(df, benchmark_id, partition.start.year, partition.start.month)
+                existing['monthly'].add(partition.key)
+            else:
+                path = fetcher.save_daily(df, partition.start.to_pydatetime()).get(benchmark_id)
+                existing['daily'].add(partition.key)
+
+            _write_benchmark_daily_statuses(
+                fetcher,
+                benchmark_id,
+                partition.start.to_pydatetime(),
+                partition.end.to_pydatetime(),
+                df,
+            )
+            benchmark_count += len(df)
+            print(f"      Saved {benchmark_id} {partition.level}: {path} ({len(df)} rows)")
+
+        print(f"    Completed {benchmark_id}: {benchmark_count} rows")
+
+    print("  Benchmark backfill completed!")
+
+
 def backfill(data_type: str, start_date: datetime, end_date: datetime):
     """
     回填历史数据
@@ -500,6 +598,9 @@ def backfill(data_type: str, start_date: datetime, end_date: datetime):
 
     if data_type in ('market', 'all'):
         backfill_market(start_date, end_date)
+
+    if data_type in ('benchmark', 'all'):
+        backfill_benchmark(start_date, end_date)
 
     if data_type in ('finance', 'all'):
         backfill_finance(start_date, end_date)
@@ -515,7 +616,7 @@ def main():
     parser.add_argument('--start', type=str, required=True, help='开始日期 (YYYY-MM-DD)')
     parser.add_argument('--end', type=str, help='结束日期 (YYYY-MM-DD)，默认为今天')
     parser.add_argument('--type', type=str, default='all',
-                        choices=['market', 'finance', 'announcement', 'all'],
+                        choices=['market', 'benchmark', 'finance', 'announcement', 'all'],
                         help='数据类型，默认为all')
     args = parser.parse_args()
 

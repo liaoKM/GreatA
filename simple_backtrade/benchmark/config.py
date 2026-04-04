@@ -35,6 +35,7 @@ class CustomIndexConfig:
     price_adjustment: PriceAdjustment = PriceAdjustment.HFQ
     event_sources: tuple[str, ...] = ("finance",)
     announcement_subtypes: tuple[str, ...] = ()
+    benchmark: str | pd.Series | None = None
 
     def __post_init__(self) -> None:
         self.start = _normalize_date(self.start)

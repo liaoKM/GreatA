@@ -26,6 +26,7 @@ def main() -> None:
                 end="2026-01-01",
                 data_path=args.data_path,
                 warmup_bars=0,
+                benchmark='tushare:000300.SH'
             ),
             FinanceGrowthIndexStrategy(),
         ).run()

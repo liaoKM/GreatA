@@ -7,10 +7,12 @@ from typing import Any
 
 import pandas as pd
 
+from .benchmark_storage import OFFICIAL_TUSHARE_BENCHMARK_IDS
 from .fetch_status import write_fetch_status
 from .fetcher.announcement_fetcher import ANNOUNCEMENT_TYPES
 from .fetcher.tushare import (
     TushareAnnouncementFetcher,
+    TushareBenchmarkFetcher,
     TushareFinanceFetcher,
     TushareMarketFetcher,
 )
@@ -115,6 +117,42 @@ def fetch_finance_day(target_date: date | datetime, data_path: str = "./data") -
         raise
 
 
+def fetch_benchmark_day(target_date: date | datetime, data_path: str = "./data") -> dict[str, Any]:
+    """Fetch, save, and record status for one benchmark day."""
+    normalized_date = _normalized_date(target_date)
+    fetcher = TushareBenchmarkFetcher(data_path=data_path)
+
+    try:
+        df = fetcher.fetch_daily(normalized_date)
+        row_count = _df_row_count(df)
+        paths = fetcher.save_daily(df, normalized_date) if row_count > 0 else {}
+
+        benchmark_results: dict[str, Any] = {}
+        for benchmark_id in OFFICIAL_TUSHARE_BENCHMARK_IDS:
+            benchmark_rows = 0 if row_count == 0 else int((df["benchmark_id"] == benchmark_id).sum())
+            benchmark_results[benchmark_id] = {
+                "status": "success" if benchmark_rows > 0 else "empty",
+                "row_count": benchmark_rows,
+            }
+            if benchmark_id in paths:
+                benchmark_results[benchmark_id]["path"] = str(paths[benchmark_id])
+
+        payload: dict[str, Any] = {
+            "data_type": "benchmark",
+            "target_date": normalized_date.isoformat(),
+            "fetched_at": _timestamp(),
+            "status": "success" if row_count > 0 else "empty",
+            "row_count": row_count,
+            "benchmarks": benchmark_results,
+        }
+        write_fetch_status(data_path, "benchmark", normalized_date, payload)
+        return payload
+    except Exception as exc:  # pragma: no cover - depends on remote API
+        payload = _error_payload("benchmark", normalized_date, exc)
+        write_fetch_status(data_path, "benchmark", normalized_date, payload)
+        raise
+
+
 def fetch_announcement_day(
     target_date: date | datetime,
     data_path: str = "./data",
@@ -180,6 +218,8 @@ def fetch_daily_data(
 
     if data_type in ("market", "all"):
         results["market"] = fetch_market_day(normalized_date, data_path=data_path)
+    if data_type in ("benchmark", "all"):
+        results["benchmark"] = fetch_benchmark_day(normalized_date, data_path=data_path)
     if data_type in ("finance", "all"):
         results["finance"] = fetch_finance_day(normalized_date, data_path=data_path)
     if data_type in ("announcement", "all"):

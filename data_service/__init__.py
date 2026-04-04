@@ -1,25 +1,40 @@
-# 数据服务模块 - 负责数据拉取和整合
-# 此模块为在线模块，依赖外部数据源（tushare等）
-
-from .fetcher.base import BaseFetcher
-from .fetcher.market_fetcher import MarketFetcher
-from .fetcher.finance_fetcher import FinanceFetcher
-from .fetcher.announcement_fetcher import AnnouncementFetcher
-
-from .aggregator.base import BaseAggregator
-from .aggregator.market_aggregator import MarketAggregator
-from .aggregator.finance_aggregator import FinanceAggregator
 from .aggregator.announcement_aggregator import AnnouncementAggregator
+from .aggregator.base import BaseAggregator
+from .aggregator.finance_aggregator import FinanceAggregator
+from .aggregator.market_aggregator import MarketAggregator
+from .fetcher.announcement_fetcher import AnnouncementFetcher
+from .fetcher.base import BaseFetcher
+from .fetcher.benchmark_fetcher import BenchmarkFetcher
+from .fetcher.finance_fetcher import FinanceFetcher
+from .fetcher.market_fetcher import MarketFetcher
 
 __all__ = [
-    # 基类
-    'BaseFetcher', 'MarketFetcher', 'FinanceFetcher', 'AnnouncementFetcher',
-    'BaseAggregator', 'MarketAggregator', 'FinanceAggregator', 'AnnouncementAggregator',
+    "BaseFetcher",
+    "BenchmarkFetcher",
+    "MarketFetcher",
+    "FinanceFetcher",
+    "AnnouncementFetcher",
+    "BaseAggregator",
+    "MarketAggregator",
+    "FinanceAggregator",
+    "AnnouncementAggregator",
 ]
 
-# Tushare 实现需要安装 tushare 包
 try:
-    from .fetcher.tushare import TushareMarketFetcher, TushareFinanceFetcher, TushareAnnouncementFetcher
-    __all__.extend(['TushareMarketFetcher', 'TushareFinanceFetcher', 'TushareAnnouncementFetcher'])
+    from .fetcher.tushare import (
+        TushareAnnouncementFetcher,
+        TushareBenchmarkFetcher,
+        TushareFinanceFetcher,
+        TushareMarketFetcher,
+    )
+
+    __all__.extend(
+        [
+            "TushareMarketFetcher",
+            "TushareFinanceFetcher",
+            "TushareAnnouncementFetcher",
+            "TushareBenchmarkFetcher",
+        ]
+    )
 except ImportError:
-    pass  # tushare 未安装，跳过
+    pass
