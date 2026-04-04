@@ -1,1 +1,5 @@
-from .data_manager import DataManager
+"""Data access layer for the v2 backtest framework."""
+
+from .portal import DataPortal
+
+__all__ = ["DataPortal"]

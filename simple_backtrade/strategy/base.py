@@ -1,17 +1,21 @@
-from datetime import datetime, timedelta
-import pandas
+"""Base strategy interface for the v2 backtest framework."""
 
-class BaseStrategy:
-    def __init__(self,init_time:datetime):
-        return
+from __future__ import annotations
 
-    
-    def handle_bar(self,date:datetime)->pandas.DataFrame:
-        return 
-    
-    def handle_finance_report(self,date:datetime,new_report_stocks:pandas.Index):
-        return
-    
-    def handle_divid(self,date:datetime):
-        return
-    
+from abc import ABC, abstractmethod
+
+from ..models import PublishedEvent, TargetPortfolio
+
+
+class BaseStrategy(ABC):
+    """Base class for daily close strategies."""
+
+    def on_initialize(self, context) -> None:
+        """Called once before the first trading session."""
+
+    def on_events(self, context, events: list[PublishedEvent]) -> None:
+        """Called before bar-close logic for each session."""
+
+    @abstractmethod
+    def on_bar_close(self, context) -> TargetPortfolio:
+        """Return the target portfolio for the current session."""

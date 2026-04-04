@@ -1,2 +1,6 @@
+"""Strategies for the v2 backtest framework."""
+
 from .base import BaseStrategy
-from .xt_kaimin import MyStrategy
+from .empty import EmptyStrategy
+
+__all__ = ["BaseStrategy", "EmptyStrategy"]
