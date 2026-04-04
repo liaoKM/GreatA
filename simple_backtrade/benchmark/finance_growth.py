@@ -45,7 +45,7 @@ class FinanceGrowthIndexStrategy(BaseStrategy):
         frame["growth"] = frame["growth"].fillna(fallback)
         frame = frame.dropna(subset=["stock_code", "end_date", "ann_date", "growth"])
         frame["stock_code"] = frame["stock_code"].astype(str)
-        frame = frame.sort_values(["stock_code", "end_date", "ann_date", "publish_date", "effective_date"])
+        frame = frame.sort_values(["stock_code", "end_date", "ann_date", "publish_date"])
         return frame.drop_duplicates(subset=["stock_code", "end_date"], keep="last").reset_index(drop=True)
 
     def _select_constituents(self, finance: pd.DataFrame) -> list[str]:

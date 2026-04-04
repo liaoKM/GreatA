@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from simple_backtrade.v2 import BacktestConfig, EmptyStrategy, TargetPortfolio
-from simple_backtrade.v2.data.portal import DataPortal
-from simple_backtrade.v2.engine.runner import BacktestEngine
-from simple_backtrade.v2.models import PublishedEvent
-from simple_backtrade.v2.strategy.base import BaseStrategy
+from simple_backtrade import BacktestConfig, EmptyStrategy, TargetPortfolio
+from simple_backtrade.data.portal import DataPortal
+from simple_backtrade.engine.runner import BacktestEngine
+from simple_backtrade.models import PublishedEvent
+from simple_backtrade.strategy.base import BaseStrategy
 
 
 def _write_market_frame(root: Path, level: str, name: str, rows: list[dict[str, object]]) -> None:
@@ -255,7 +255,7 @@ class FrameworkTests(unittest.TestCase):
         adjusted = portal.adjusted_close("2026-01-05", stock_codes=["AAA.SZ"])
         self.assertEqual(float(adjusted.loc["AAA.SZ"]), 90.0)
 
-    def test_event_schedule_uses_next_trading_day_and_precedes_bar(self) -> None:
+    def test_event_schedule_uses_session_window_and_precedes_bar(self) -> None:
         _write_market_frame(self.data_root, "daily", "2026-01-02", [self._base_market_rows()[0]])
         _write_market_frame(self.data_root, "daily", "2026-01-05", [self._base_market_rows()[1]])
         _write_market_frame(self.data_root, "daily", "2026-01-06", [self._base_market_rows()[2]])
@@ -300,12 +300,19 @@ class FrameworkTests(unittest.TestCase):
         result = engine.run()
 
         self.assertEqual(len(result.event_log), 2)
-        self.assertTrue((result.event_log["effective_date"] == pd.Timestamp("2026-01-05")).all())
+        self.assertEqual(
+            result.event_log["publish_date"].dt.strftime("%Y-%m-%d").tolist(),
+            ["2026-01-02", "2026-01-03"],
+        )
+        self.assertEqual(
+            result.event_log["session_date"].dt.strftime("%Y-%m-%d").tolist(),
+            ["2026-01-02", "2026-01-05"],
+        )
         expected_calls = [
             ("initialize", "none", 0),
-            ("events", "2026-01-02", 0),
+            ("events", "2026-01-02", 1),
             ("bar", "2026-01-02", 0),
-            ("events", "2026-01-05", 2),
+            ("events", "2026-01-05", 1),
             ("bar", "2026-01-05", 0),
             ("events", "2026-01-06", 0),
             ("bar", "2026-01-06", 0),

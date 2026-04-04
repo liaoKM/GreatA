@@ -1,37 +1,52 @@
-import matplotlib.pyplot as plt
-import simple_backtrade
-from multiprocessing import Pool
-import numpy as np
-import pandas
-from simple_backtrade.log import TradeLogger
-import datetime
+import argparse
 
-def task(year):
-    start_time='{}-01-01'.format(year)
-    if year==2025:
-        end_time='2025-10-31'
-    else:
-        end_time='{}-12-31'.format(year)
-    simulator=simple_backtrade.backtrade.LocalSimulator(start_time,end_time,None)
-    analyze_result=simulator.start()
-    return analyze_result
+from simple_backtrade.config import BacktestConfig
+from simple_backtrade.engine.runner import run_backtest
+from simple_backtrade.strategy.empty import EmptyStrategy
+from simple_backtrade.benchmark import (
+    CustomIndexBenchmarkProvider,
+    CustomIndexConfig,
+    CustomIndexEngine,
+    FinanceGrowthIndexStrategy,
+)
 
 
-if __name__=='__main__':
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run the v2 local backtest demo")
+    parser.add_argument("--start", required=True, help="Backtest start date, for example 2026-01-05")
+    parser.add_argument("--end", required=True, help="Backtest end date, for example 2026-01-31")
+    parser.add_argument("--data-path", default="./data", help="Root data directory")
+    parser.add_argument("--initial-cash", type=float, default=1_000_000, help="Initial account cash")
+    parser.add_argument("--warmup-bars", type=int, default=60, help="Warmup bars loaded before start")
+    args = parser.parse_args()
 
-    # simulator=simple_backtrade.backtrade.LocalSimulator('2025-01-01','2025-10-31',None)
-    # analyze_result=simulator.start()
+    result = CustomIndexEngine(
+            CustomIndexConfig(
+                start="2025-01-01",
+                end="2026-01-01",
+                data_path=args.data_path,
+                warmup_bars=0,
+            ),
+            FinanceGrowthIndexStrategy(),
+        ).run()
 
-    analyze_results=[]
-    for i in range(2014,2026):
-        analyze_results.append(task(i))
-    # param_list=list(np.arange(2012,2024))
-    # with Pool(len(param_list)) as p:
-    #     analyze_results=p.map(task,param_list)
+    config = BacktestConfig(
+        start=args.start,
+        end=args.end,
+        data_path=args.data_path,
+        initial_cash=args.initial_cash,
+        warmup_bars=args.warmup_bars,
+    )
+    result = run_backtest(config, EmptyStrategy())
 
-    daily_returns=pandas.concat([analyze_result['daily_returns'] for analyze_result in analyze_results])
-    benchmark=pandas.concat([analyze_result['benchmark'] for analyze_result in analyze_results])
-    merge_logger=TradeLogger()
-    merge_logger.daily_returns=daily_returns
-    merge_logger.benchmark=benchmark
-    merge_logger.analyze()
+    print("Summary")
+    for key, value in result.summary.items():
+        print(f"  {key}: {value}")
+
+    print("")
+    print("Equity Curve")
+    print(result.equity_curve.tail())
+
+
+if __name__ == "__main__":
+    main()

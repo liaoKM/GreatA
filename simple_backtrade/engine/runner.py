@@ -52,9 +52,10 @@ class BacktestEngine:
         trade_rows: list[dict[str, object]] = []
         event_rows: list[dict[str, object]] = []
 
+        previous_session_date: pd.Timestamp | None = None
         for session_date in self.data_portal.sessions:
             self.context.set_session(session_date)
-            events = self._get_session_events(session_date)
+            events = self._get_session_events(session_date, previous_session_date)
             trades, consumed_events = self._process_session(session_date, events)
             equity = self.broker.equity(session_date)
             equity_points.append((session_date, equity))
@@ -72,7 +73,9 @@ class BacktestEngine:
                 trade_rows.append(asdict(trade))
 
             for event in consumed_events:
-                event_rows.append(self._event_to_record(event))
+                event_rows.append(self._event_to_record(event, session_date))
+
+            previous_session_date = session_date
 
         equity_curve = pd.Series(
             [value for _, value in equity_points],
@@ -95,9 +98,14 @@ class BacktestEngine:
             benchmark=benchmark,
         )
 
-    def _get_session_events(self, session_date: pd.Timestamp) -> list[PublishedEvent]:
+    def _get_session_events(
+        self,
+        session_date: pd.Timestamp,
+        previous_session_date: pd.Timestamp | None,
+    ) -> list[PublishedEvent]:
         return self.data_portal.events.for_session(
             session_date,
+            previous_session_date=previous_session_date,
             sources=self.event_sources,
             announcement_subtypes=self.announcement_subtypes,
         )
@@ -135,13 +143,13 @@ class BacktestEngine:
         return series.reindex(sessions).dropna()
 
     @staticmethod
-    def _event_to_record(event: PublishedEvent) -> dict[str, object]:
+    def _event_to_record(event: PublishedEvent, session_date: pd.Timestamp) -> dict[str, object]:
         return {
             "source": event.source,
             "subtype": event.subtype,
             "stock_code": event.stock_code,
             "publish_date": pd.Timestamp(event.publish_date),
-            "effective_date": pd.Timestamp(event.effective_date),
+            "session_date": pd.Timestamp(session_date),
             "payload": event.payload,
         }
 

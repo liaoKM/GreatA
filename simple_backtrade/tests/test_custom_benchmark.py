@@ -8,16 +8,16 @@ from pathlib import Path
 
 import pandas as pd
 
-from simple_backtrade.v2 import BacktestConfig, EmptyStrategy, TargetPortfolio
-from simple_backtrade.v2.benchmark import (
+from simple_backtrade import BacktestConfig, EmptyStrategy, TargetPortfolio
+from simple_backtrade.benchmark import (
     CustomIndexBenchmarkProvider,
     CustomIndexConfig,
     CustomIndexEngine,
     FinanceGrowthIndexStrategy,
 )
-from simple_backtrade.v2.engine.runner import BacktestEngine
-from simple_backtrade.v2.models import PublishedEvent
-from simple_backtrade.v2.strategy.base import BaseStrategy
+from simple_backtrade.engine.runner import BacktestEngine
+from simple_backtrade.models import PublishedEvent
+from simple_backtrade.strategy.base import BaseStrategy
 
 
 def _write_market_frame(root: Path, level: str, name: str, rows: list[dict[str, object]]) -> None:
@@ -154,8 +154,8 @@ class CustomBenchmarkTests(unittest.TestCase):
             strategy.call_log,
             [
                 ("initialize", "none", 0),
-                ("events", "2026-01-05", 1),
-                ("bar", "2026-01-05", 0),
+                ("events", "2026-01-02", 1),
+                ("bar", "2026-01-02", 0),
             ],
         )
 
@@ -195,21 +195,22 @@ class CustomBenchmarkTests(unittest.TestCase):
         self.assertEqual(len(result.trades), 4)
 
         positions_on_first_rebalance = result.positions[
-            result.positions["session_date"] == pd.Timestamp("2026-01-05")
+            result.positions["session_date"] == pd.Timestamp("2026-01-02")
         ].sort_values("stock_code")
-        self.assertAlmostEqual(float(positions_on_first_rebalance.iloc[0]["quantity"]), 16.6666666667, places=6)
+        self.assertAlmostEqual(float(positions_on_first_rebalance.iloc[0]["quantity"]), 50.0, places=6)
         self.assertAlmostEqual(float(positions_on_first_rebalance.iloc[1]["quantity"]), 50.0, places=6)
 
         positions_on_second_rebalance = result.positions[
-            result.positions["session_date"] == pd.Timestamp("2026-01-06")
+            result.positions["session_date"] == pd.Timestamp("2026-01-05")
         ].sort_values("stock_code")
         self.assertAlmostEqual(
             float(positions_on_second_rebalance.iloc[0]["quantity"]),
             float(positions_on_first_rebalance.iloc[0]["quantity"]),
             places=6,
         )
-        self.assertAlmostEqual(float(result.equity_curve.loc[pd.Timestamp("2026-01-06")]), 1200.0, places=6)
-        self.assertTrue(result.positions[result.positions["session_date"] == pd.Timestamp("2026-01-07")].empty)
+        self.assertAlmostEqual(float(result.equity_curve.loc[pd.Timestamp("2026-01-05")]), 2000.0, places=6)
+        self.assertTrue(result.positions[result.positions["session_date"] == pd.Timestamp("2026-01-06")].empty)
+        self.assertAlmostEqual(float(result.equity_curve.loc[pd.Timestamp("2026-01-07")]), 2400.0, places=6)
         self.assertNotIn("benchmark_total_return", result.summary)
 
     def test_provider_caches_result_and_can_feed_regular_backtest(self) -> None:
@@ -272,23 +273,23 @@ class CustomBenchmarkTests(unittest.TestCase):
         _write_finance_frame(
             self.data_root,
             "daily",
-            "2026-04-28",
+            "2026-04-29",
             [
                 {"stock_code": "AAA.SZ", "ann_date": "2023-03-20", "end_date": "2022-12-31", "dt_netprofit_yoy": 15.0, "netprofit_yoy": 15.0},
                 {"stock_code": "AAA.SZ", "ann_date": "2024-03-20", "end_date": "2023-12-31", "dt_netprofit_yoy": 12.0, "netprofit_yoy": 12.0},
                 {"stock_code": "AAA.SZ", "ann_date": "2025-03-20", "end_date": "2024-12-31", "dt_netprofit_yoy": None, "netprofit_yoy": 11.0},
-                {"stock_code": "AAA.SZ", "ann_date": "2026-04-28", "end_date": "2026-03-31", "dt_netprofit_yoy": None, "netprofit_yoy": 5.0},
+                {"stock_code": "AAA.SZ", "ann_date": "2026-04-29", "end_date": "2026-03-31", "dt_netprofit_yoy": None, "netprofit_yoy": 5.0},
                 {"stock_code": "BBB.SZ", "ann_date": "2023-03-20", "end_date": "2022-12-31", "dt_netprofit_yoy": 15.0, "netprofit_yoy": 15.0},
                 {"stock_code": "BBB.SZ", "ann_date": "2024-03-20", "end_date": "2023-12-31", "dt_netprofit_yoy": 9.0, "netprofit_yoy": 9.0},
                 {"stock_code": "BBB.SZ", "ann_date": "2025-03-20", "end_date": "2024-12-31", "dt_netprofit_yoy": 13.0, "netprofit_yoy": 13.0},
-                {"stock_code": "BBB.SZ", "ann_date": "2026-04-28", "end_date": "2026-03-31", "dt_netprofit_yoy": 6.0, "netprofit_yoy": 6.0},
+                {"stock_code": "BBB.SZ", "ann_date": "2026-04-29", "end_date": "2026-03-31", "dt_netprofit_yoy": 6.0, "netprofit_yoy": 6.0},
                 {"stock_code": "CCC.SZ", "ann_date": "2023-03-20", "end_date": "2022-12-31", "dt_netprofit_yoy": 14.0, "netprofit_yoy": 14.0},
                 {"stock_code": "CCC.SZ", "ann_date": "2024-03-20", "end_date": "2023-12-31", "dt_netprofit_yoy": 16.0, "netprofit_yoy": 16.0},
                 {"stock_code": "CCC.SZ", "ann_date": "2025-03-20", "end_date": "2024-12-31", "dt_netprofit_yoy": 18.0, "netprofit_yoy": 18.0},
-                {"stock_code": "CCC.SZ", "ann_date": "2026-04-28", "end_date": "2026-03-31", "dt_netprofit_yoy": -1.0, "netprofit_yoy": -1.0},
+                {"stock_code": "CCC.SZ", "ann_date": "2026-04-29", "end_date": "2026-03-31", "dt_netprofit_yoy": -1.0, "netprofit_yoy": -1.0},
                 {"stock_code": "DDD.SZ", "ann_date": "2024-03-20", "end_date": "2023-12-31", "dt_netprofit_yoy": 20.0, "netprofit_yoy": 20.0},
                 {"stock_code": "DDD.SZ", "ann_date": "2025-03-20", "end_date": "2024-12-31", "dt_netprofit_yoy": 22.0, "netprofit_yoy": 22.0},
-                {"stock_code": "DDD.SZ", "ann_date": "2026-04-28", "end_date": "2026-03-31", "dt_netprofit_yoy": 7.0, "netprofit_yoy": 7.0},
+                {"stock_code": "DDD.SZ", "ann_date": "2026-04-29", "end_date": "2026-03-31", "dt_netprofit_yoy": 7.0, "netprofit_yoy": 7.0},
             ],
         )
 

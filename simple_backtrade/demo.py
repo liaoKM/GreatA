@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 
-from .config import BacktestConfig
-from .engine.runner import run_backtest
-from .strategy.empty import EmptyStrategy
-from simple_backtrade.v2.benchmark import (
+from simple_backtrade.config import BacktestConfig
+from simple_backtrade.engine.runner import run_backtest
+from simple_backtrade.strategy.empty import EmptyStrategy
+from simple_backtrade.benchmark import (
     CustomIndexBenchmarkProvider,
     CustomIndexConfig,
     CustomIndexEngine,

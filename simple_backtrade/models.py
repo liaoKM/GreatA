@@ -66,7 +66,6 @@ class PublishedEvent:
     subtype: str | None
     stock_code: str
     publish_date: date
-    effective_date: date
     payload: dict[str, Any]
 
 
