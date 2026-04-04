@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import Literal
 
 import pandas as pd
 
@@ -11,8 +12,11 @@ from ..data.portal import DataPortal
 from ..models import PublishedEvent, TargetPortfolio
 from ..report.result import BacktestResult, build_summary
 from ..strategy.base import BaseStrategy
-from .broker import Broker
+from .broker import Broker, PortfolioLedger, TradeRecord
 from .context import StrategyContext
+
+
+RebalancePolicy = Literal["daily", "event_driven"]
 
 
 class BacktestEngine:
@@ -23,12 +27,21 @@ class BacktestEngine:
         config: BacktestConfig,
         strategy: BaseStrategy,
         data_portal: DataPortal | None = None,
+        portfolio: PortfolioLedger | None = None,
+        rebalance_policy: RebalancePolicy = "daily",
+        event_sources: tuple[str, ...] | None = None,
+        announcement_subtypes: tuple[str, ...] | None = None,
     ):
         self.config = config
         self.strategy = strategy
         self.data_portal = data_portal or DataPortal(config)
-        self.broker = Broker(self.data_portal, initial_cash=config.initial_cash)
+        self.broker = portfolio or Broker(self.data_portal, initial_cash=config.initial_cash)
         self.context = StrategyContext(config=config, data=self.data_portal, broker=self.broker)
+        self.rebalance_policy = rebalance_policy
+        self.event_sources = event_sources
+        self.announcement_subtypes = announcement_subtypes
+        if self.rebalance_policy not in ("daily", "event_driven"):
+            raise ValueError(f"Unsupported rebalance policy: {self.rebalance_policy}")
 
     def run(self) -> BacktestResult:
         """Execute the backtest and return structured results."""
@@ -41,13 +54,8 @@ class BacktestEngine:
 
         for session_date in self.data_portal.sessions:
             self.context.set_session(session_date)
-            events = self.data_portal.events.for_session(session_date)
-            self.strategy.on_events(self.context, events)
-            target = self.strategy.on_bar_close(self.context)
-            if target is None:
-                target = TargetPortfolio.empty()
-
-            trades = self.broker.rebalance(session_date, target)
+            events = self._get_session_events(session_date)
+            trades, consumed_events = self._process_session(session_date, events)
             equity = self.broker.equity(session_date)
             equity_points.append((session_date, equity))
 
@@ -56,14 +64,14 @@ class BacktestEngine:
                     {
                         "session_date": session_date,
                         "stock_code": str(stock_code),
-                        "quantity": int(quantity),
+                        "quantity": float(quantity),
                     }
                 )
 
             for trade in trades:
                 trade_rows.append(asdict(trade))
 
-            for event in events:
+            for event in consumed_events:
                 event_rows.append(self._event_to_record(event))
 
         equity_curve = pd.Series(
@@ -87,8 +95,37 @@ class BacktestEngine:
             benchmark=benchmark,
         )
 
+    def _get_session_events(self, session_date: pd.Timestamp) -> list[PublishedEvent]:
+        return self.data_portal.events.for_session(
+            session_date,
+            sources=self.event_sources,
+            announcement_subtypes=self.announcement_subtypes,
+        )
+
+    def _process_session(
+        self,
+        session_date: pd.Timestamp,
+        events: list[PublishedEvent],
+    ) -> tuple[list[TradeRecord], list[PublishedEvent]]:
+        if self.rebalance_policy == "event_driven" and not events:
+            return [], []
+
+        self.strategy.on_events(self.context, events)
+        target = self.strategy.on_bar_close(self.context)
+
+        if self.rebalance_policy == "daily":
+            if target is None:
+                target = TargetPortfolio.empty()
+            trades = self.broker.rebalance(session_date, target)
+            return trades, events
+
+        if target is None:
+            return [], events
+        trades = self.broker.rebalance(session_date, target)
+        return trades, events
+
     def _resolve_benchmark(self, sessions: pd.DatetimeIndex) -> pd.Series | None:
-        benchmark = self.config.benchmark
+        benchmark = getattr(self.config, "benchmark", None)
         if benchmark is None:
             return None
         if hasattr(benchmark, "get_series"):

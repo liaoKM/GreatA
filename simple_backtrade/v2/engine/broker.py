@@ -1,7 +1,8 @@
-"""Broker and portfolio state for the v2 backtest framework."""
+"""Portfolio ledgers for the v2 backtest framework."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import pandas as pd
@@ -18,13 +19,34 @@ class TradeRecord:
     session_date: pd.Timestamp
     stock_code: str
     side: str
-    quantity: int
+    quantity: float
     price: float
     notional: float
     instrument_type: str = InstrumentType.EQUITY.value
 
 
-class Broker:
+class PortfolioLedger(ABC):
+    """Abstract portfolio ledger used by backtest engines."""
+
+    def __init__(self, portal: DataPortal, initial_cash: float):
+        self.portal = portal
+        self.cash = float(initial_cash)
+        self.positions = pd.Series(dtype="float64")
+
+    @abstractmethod
+    def equity(self, session_date: pd.Timestamp | str) -> float:
+        """Mark the portfolio to market."""
+
+    @abstractmethod
+    def rebalance(
+        self,
+        session_date: pd.Timestamp | str,
+        target: TargetPortfolio | None,
+    ) -> list[TradeRecord]:
+        """Rebalance the portfolio to the target weights."""
+
+
+class Broker(PortfolioLedger):
     """Long-only broker using adjusted close prices for valuation and execution."""
 
     def __init__(
@@ -34,8 +56,7 @@ class Broker:
         execution_model: ExecutionModel | None = None,
         default_spec: InstrumentSpec | None = None,
     ):
-        self.portal = portal
-        self.cash = float(initial_cash)
+        super().__init__(portal, initial_cash)
         self.positions = pd.Series(dtype="int64")
         self.execution_model = execution_model or CloseExecutionModel()
         self.default_spec = default_spec or InstrumentSpec()
@@ -111,4 +132,88 @@ class Broker:
             trades.append(TradeRecord(session_date, stock_code, "buy", affordable_quantity, price, notional))
 
         self.positions = current_shares[current_shares > 0].sort_index()
+        return trades
+
+
+class IndexPortfolio(PortfolioLedger):
+    """Fractional-share index ledger for custom benchmark calculation."""
+
+    def __init__(
+        self,
+        portal: DataPortal,
+        initial_level: float,
+        execution_model: ExecutionModel | None = None,
+    ):
+        super().__init__(portal, initial_level)
+        self.positions = pd.Series(dtype="float64")
+        self.execution_model = execution_model or CloseExecutionModel()
+
+    def equity(self, session_date: pd.Timestamp | str) -> float:
+        """Mark the index portfolio to the latest adjusted close."""
+        if self.positions.empty:
+            return float(self.cash)
+        prices = self.portal.adjusted_close_asof(session_date, stock_codes=self.positions.index)
+        if prices.empty:
+            return float(self.cash)
+        aligned_positions = self.positions.reindex(prices.index, fill_value=0.0)
+        return float(self.cash + (aligned_positions * prices).sum())
+
+    def rebalance(
+        self,
+        session_date: pd.Timestamp | str,
+        target: TargetPortfolio | None,
+    ) -> list[TradeRecord]:
+        """Rebalance the index portfolio using fractional shares and full investment."""
+        session_date = pd.Timestamp(session_date).normalize()
+        target = target or TargetPortfolio.empty()
+        weights = target.weights
+        tradable_codes = pd.Index(sorted(set(self.positions.index.astype(str)).union(weights.index.astype(str))))
+        if tradable_codes.empty:
+            if target.weights.empty:
+                self.cash = self.equity(session_date)
+                self.positions = pd.Series(dtype="float64")
+            return []
+
+        fill_prices = self.execution_model.get_fill_prices(self.portal, session_date, tradable_codes)
+        tradable_codes = fill_prices.index
+        if tradable_codes.empty:
+            if target.weights.empty:
+                self.cash = self.equity(session_date)
+                self.positions = pd.Series(dtype="float64")
+            return []
+
+        current_equity = self.equity(session_date)
+        desired_shares = pd.Series(0.0, index=tradable_codes, dtype="float64")
+
+        positive_weights = weights[weights > 0]
+        tradable_weights = positive_weights[positive_weights.index.isin(fill_prices.index)]
+        if not tradable_weights.empty:
+            normalized_weights = tradable_weights / float(tradable_weights.sum())
+            for stock_code, target_weight in normalized_weights.items():
+                price = float(fill_prices.loc[stock_code])
+                if price <= 0:
+                    continue
+                desired_value = current_equity * float(target_weight)
+                desired_shares.loc[stock_code] = desired_value / price
+
+        current_shares = self.positions.reindex(tradable_codes, fill_value=0.0).astype("float64")
+        deltas = desired_shares - current_shares
+        trades: list[TradeRecord] = []
+
+        for stock_code, delta in deltas[deltas < 0].sort_index().items():
+            quantity = float(-delta)
+            price = float(fill_prices.loc[stock_code])
+            notional = quantity * price
+            trades.append(TradeRecord(session_date, stock_code, "sell", quantity, price, notional))
+
+        for stock_code, delta in deltas[deltas > 0].sort_index().items():
+            quantity = float(delta)
+            price = float(fill_prices.loc[stock_code])
+            notional = quantity * price
+            trades.append(TradeRecord(session_date, stock_code, "buy", quantity, price, notional))
+
+        self.positions = desired_shares[desired_shares > 0].sort_index()
+        self.cash = float(current_equity - (self.positions * fill_prices.reindex(self.positions.index)).sum())
+        if abs(self.cash) < 1e-9:
+            self.cash = 0.0
         return trades

@@ -1,5 +1,12 @@
 """Backtest framework v2."""
 
+from .benchmark import (
+    CustomIndexBenchmarkProvider,
+    CustomIndexConfig,
+    CustomIndexEngine,
+    FinanceGrowthIndexStrategy,
+    run_custom_index,
+)
 from .config import BacktestConfig
 from .engine.runner import BacktestEngine, run_backtest
 from .models import (
@@ -23,6 +30,10 @@ __all__ = [
     "BacktestResult",
     "BaseStrategy",
     "BarFrequency",
+    "CustomIndexBenchmarkProvider",
+    "CustomIndexConfig",
+    "CustomIndexEngine",
+    "FinanceGrowthIndexStrategy",
     "EmptyStrategy",
     "ExposureBucket",
     "InstrumentSpec",
@@ -32,5 +43,6 @@ __all__ = [
     "PublishedEvent",
     "TargetPortfolio",
     "TradeTiming",
+    "run_custom_index",
     "run_backtest",
 ]

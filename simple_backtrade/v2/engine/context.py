@@ -16,7 +16,7 @@ class StrategyContext:
 
     config: BacktestConfig
     data: DataPortal
-    broker: "Broker"
+    broker: "PortfolioLedger"
     session_date: pd.Timestamp | None = None
 
     def set_session(self, session_date: pd.Timestamp) -> None:
@@ -37,4 +37,4 @@ class StrategyContext:
         return self.broker.positions.copy()
 
 
-from .broker import Broker  # noqa: E402  pylint: disable=wrong-import-position
+from .broker import PortfolioLedger  # noqa: E402  pylint: disable=wrong-import-position

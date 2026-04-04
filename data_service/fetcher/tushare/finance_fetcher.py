@@ -10,11 +10,50 @@ from config.settings import get_token
 class TushareFinanceFetcher(FinanceFetcher):
     """Tushare 财报数据拉取器"""
 
+    MAX_FINANCE_ANNOUNCEMENT_LAG_DAYS = 124
+
     def __init__(self, token: str = None, data_path: str = './data'):
         super().__init__(data_path)
         if token is None:
             token = get_token('tushare')
         self.pro = ts.pro_api(token)
+
+    def _deduplicate_same_day_reissues(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Deduplicate same-day reissues, preferring rows with update_flag == 1."""
+        duplicate_keys = ['stock_code', 'ann_date', 'end_date']
+        if df.empty:
+            return df
+
+        duplicated_mask = df.duplicated(subset=duplicate_keys, keep=False)
+        if not duplicated_mask.any():
+            return df
+
+        duplicate_rows = df.loc[duplicated_mask].copy()
+        duplicate_rows['_update_priority'] = pd.to_numeric(
+            duplicate_rows.get('update_flag'),
+            errors='coerce',
+        ).fillna(0)
+
+        for _, group in duplicate_rows.groupby(duplicate_keys, sort=False):
+            if len(group) <= 1:
+                continue
+            if (group['_update_priority'] == 1).any():
+                continue
+            breakpoint()
+
+        working = df.copy()
+        working['_update_priority'] = pd.to_numeric(
+            working.get('update_flag'),
+            errors='coerce',
+        ).fillna(0)
+        working['_source_order'] = range(len(working))
+        working = working.sort_values(
+            ['stock_code', 'ann_date', 'end_date', '_update_priority', '_source_order'],
+            ascending=[True, True, True, False, False],
+            kind='mergesort',
+        )
+        working = working.drop_duplicates(subset=duplicate_keys, keep='first')
+        return working.drop(columns=['_update_priority', '_source_order']).reset_index(drop=True)
 
     def fetch_daily(self, date: datetime) -> pd.DataFrame:
         """
@@ -41,6 +80,11 @@ class TushareFinanceFetcher(FinanceFetcher):
 
         df['ann_date'] = pd.to_datetime(df['ann_date'])
         df['end_date'] = pd.to_datetime(df['end_date'])
+
+        # 丢弃上市后集中补发的历史财报，避免把过晚披露的数据带入后续分析和回测。
+        announcement_lag = (df['ann_date'] - df['end_date']).dt.days
+        df = df[announcement_lag <= self.MAX_FINANCE_ANNOUNCEMENT_LAG_DAYS].copy()
+        df = self._deduplicate_same_day_reissues(df)
 
         return df
 
@@ -72,31 +116,6 @@ class TushareFinanceFetcher(FinanceFetcher):
 
         result = pd.concat(all_dfs, ignore_index=True)
         return result
-
-    def fetch_by_report_period(self, period: str) -> pd.DataFrame:
-        """
-        按报告期拉取财报
-
-        Args:
-            period: 报告期，如 '20251231'（年报）, '20250930'（三季报）
-
-        Returns:
-            DataFrame包含该报告期所有财报
-        """
-        # 使用 fina_indicator_vip 接口
-        df = self.pro.fina_indicator_vip(end_date=period)
-
-        if df is None or df.empty:
-            return pd.DataFrame()
-
-        df = df.rename(columns={
-            'ts_code': 'stock_code',
-        })
-
-        df['ann_date'] = pd.to_datetime(df['ann_date'])
-        df['end_date'] = pd.to_datetime(df['end_date'])
-
-        return df
 
     def fetch_income(self, period: str = None, ts_code: str = None) -> pd.DataFrame:
         """

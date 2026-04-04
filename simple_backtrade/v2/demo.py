@@ -7,6 +7,12 @@ import argparse
 from .config import BacktestConfig
 from .engine.runner import run_backtest
 from .strategy.empty import EmptyStrategy
+from simple_backtrade.v2.benchmark import (
+    CustomIndexBenchmarkProvider,
+    CustomIndexConfig,
+    CustomIndexEngine,
+    FinanceGrowthIndexStrategy,
+)
 
 
 def main() -> None:
@@ -17,6 +23,16 @@ def main() -> None:
     parser.add_argument("--initial-cash", type=float, default=1_000_000, help="Initial account cash")
     parser.add_argument("--warmup-bars", type=int, default=60, help="Warmup bars loaded before start")
     args = parser.parse_args()
+
+    result = CustomIndexEngine(
+            CustomIndexConfig(
+                start="2025-01-01",
+                end="2026-01-01",
+                data_path=args.data_path,
+                warmup_bars=0,
+            ),
+            FinanceGrowthIndexStrategy(),
+        ).run()
 
     config = BacktestConfig(
         start=args.start,

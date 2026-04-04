@@ -36,16 +36,3 @@ class FinanceFetcher(BaseFetcher):
             DataFrame包含时间范围内所有财报
         """
         pass
-
-    @abstractmethod
-    def fetch_by_report_period(self, period: str) -> pd.DataFrame:
-        """
-        按报告期拉取财报
-
-        Args:
-            period: 报告期，如 '20251231'（年报）, '20250930'（三季报）
-
-        Returns:
-            DataFrame包含该报告期所有财报
-        """
-        pass
