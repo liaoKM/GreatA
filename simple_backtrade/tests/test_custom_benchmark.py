@@ -156,6 +156,10 @@ class CustomBenchmarkTests(unittest.TestCase):
                 ("initialize", "none", 0),
                 ("events", "2026-01-02", 1),
                 ("bar", "2026-01-02", 0),
+                ("events", "2026-01-05", 0),
+                ("bar", "2026-01-05", 0),
+                ("events", "2026-01-06", 0),
+                ("bar", "2026-01-06", 0),
             ],
         )
 
@@ -307,6 +311,64 @@ class CustomBenchmarkTests(unittest.TestCase):
         self.assertEqual(list(positions["stock_code"]), ["AAA.SZ"])
         self.assertAlmostEqual(float(positions.iloc[0]["quantity"]), 100.0, places=6)
         self.assertAlmostEqual(float(result.equity_curve.iloc[0]), 1000.0, places=6)
+
+    def test_finance_growth_strategy_initializes_from_previous_natural_day_and_updates_on_event(self) -> None:
+        _write_market_frame(
+            self.data_root,
+            "daily",
+            "2026-04-29",
+            [
+                {"stock_code": "AAA.SZ", "trade_date": "2026-04-29", "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0, "adj_factor": 1.0},
+                {"stock_code": "BBB.SZ", "trade_date": "2026-04-29", "open": 20.0, "high": 20.0, "low": 20.0, "close": 20.0, "adj_factor": 1.0},
+            ],
+        )
+        _write_market_frame(
+            self.data_root,
+            "daily",
+            "2026-04-30",
+            [
+                {"stock_code": "AAA.SZ", "trade_date": "2026-04-30", "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0, "adj_factor": 1.0},
+                {"stock_code": "BBB.SZ", "trade_date": "2026-04-30", "open": 20.0, "high": 20.0, "low": 20.0, "close": 20.0, "adj_factor": 1.0},
+            ],
+        )
+        _write_finance_frame(
+            self.data_root,
+            "daily",
+            "2026-04-28",
+            [
+                {"stock_code": "AAA.SZ", "ann_date": "2023-03-20", "end_date": "2022-12-31", "dt_netprofit_yoy": 15.0, "netprofit_yoy": 15.0},
+                {"stock_code": "AAA.SZ", "ann_date": "2024-03-20", "end_date": "2023-12-31", "dt_netprofit_yoy": 12.0, "netprofit_yoy": 12.0},
+                {"stock_code": "AAA.SZ", "ann_date": "2025-03-20", "end_date": "2024-12-31", "dt_netprofit_yoy": 11.0, "netprofit_yoy": 11.0},
+                {"stock_code": "AAA.SZ", "ann_date": "2026-04-28", "end_date": "2026-03-31", "dt_netprofit_yoy": 6.0, "netprofit_yoy": 6.0},
+                {"stock_code": "BBB.SZ", "ann_date": "2023-03-20", "end_date": "2022-12-31", "dt_netprofit_yoy": 13.0, "netprofit_yoy": 13.0},
+                {"stock_code": "BBB.SZ", "ann_date": "2024-03-20", "end_date": "2023-12-31", "dt_netprofit_yoy": 14.0, "netprofit_yoy": 14.0},
+                {"stock_code": "BBB.SZ", "ann_date": "2025-03-20", "end_date": "2024-12-31", "dt_netprofit_yoy": 16.0, "netprofit_yoy": 16.0},
+            ],
+        )
+        _write_finance_frame(
+            self.data_root,
+            "daily",
+            "2026-04-29",
+            [
+                {"stock_code": "BBB.SZ", "ann_date": "2026-04-29", "end_date": "2026-03-31", "dt_netprofit_yoy": 5.0, "netprofit_yoy": 5.0},
+            ],
+        )
+
+        result = CustomIndexEngine(
+            CustomIndexConfig(
+                start="2026-04-29",
+                end="2026-04-30",
+                data_path=self.data_root,
+                warmup_bars=0,
+            ),
+            FinanceGrowthIndexStrategy(),
+        ).run()
+
+        first_day = result.positions[result.positions["session_date"] == pd.Timestamp("2026-04-29")].sort_values("stock_code")
+        second_day = result.positions[result.positions["session_date"] == pd.Timestamp("2026-04-30")].sort_values("stock_code")
+        self.assertEqual(first_day["stock_code"].tolist(), ["AAA.SZ", "BBB.SZ"])
+        self.assertEqual(second_day["stock_code"].tolist(), ["AAA.SZ", "BBB.SZ"])
+        self.assertEqual(result.event_log["session_date"].dt.strftime("%Y-%m-%d").tolist(), ["2026-04-29"])
 
 
 if __name__ == "__main__":

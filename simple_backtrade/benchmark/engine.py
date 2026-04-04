@@ -26,7 +26,6 @@ class CustomIndexEngine(BacktestEngine):
             strategy=strategy,
             data_portal=portal,
             portfolio=portfolio,
-            rebalance_policy="event_driven",
             event_sources=config.event_sources,
             announcement_subtypes=config.announcement_subtypes or None,
         )

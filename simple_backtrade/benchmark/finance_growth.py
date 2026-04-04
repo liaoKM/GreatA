@@ -20,18 +20,38 @@ class FinanceGrowthIndexStrategy(BaseStrategy):
         self.annual_growth_threshold = float(annual_growth_threshold)
         self.latest_growth_threshold = float(latest_growth_threshold)
         self.annual_report_count = int(annual_report_count)
+        self.stocks_pool: set[str] = set()
+
+    def on_initialize(self, context) -> None:
+        initial_asof = pd.Timestamp(context.config.start).normalize() - pd.Timedelta(days=1)
+        finance = context.data.finance.asof(initial_asof)
+        if finance.empty:
+            self.stocks_pool = set()
+            return
+        prepared = self._prepare_finance_frame(finance)
+        self.stocks_pool = self._select_constituents(prepared)
+
+    def on_events(self, context, events) -> None:
+        touched = sorted(
+            {
+                str(event.stock_code)
+                for event in events
+                if event.source == "finance"
+            }
+        )
+        if not touched:
+            return
+
+        finance = context.data.finance.asof(context.session_date, stock_codes=touched)
+        prepared = self._prepare_finance_frame(finance)
+        qualified = self._select_constituents(prepared)
+        qualified_set = set(qualified)
+
+        self.stocks_pool.difference_update(touched)
+        self.stocks_pool.update(qualified_set)
 
     def on_bar_close(self, context):
-        finance = context.data.finance.asof(context.session_date)
-        if finance.empty:
-            return TargetPortfolio.empty()
-
-        finance = self._prepare_finance_frame(finance)
-        if finance.empty:
-            return TargetPortfolio.empty()
-
-        qualified = self._select_constituents(finance)
-        return TargetPortfolio.equal_weight(qualified)
+        return TargetPortfolio.equal_weight(sorted(self.stocks_pool))
 
     @staticmethod
     def _prepare_finance_frame(finance: pd.DataFrame) -> pd.DataFrame:
@@ -48,10 +68,13 @@ class FinanceGrowthIndexStrategy(BaseStrategy):
         frame = frame.sort_values(["stock_code", "end_date", "ann_date", "publish_date"])
         return frame.drop_duplicates(subset=["stock_code", "end_date"], keep="last").reset_index(drop=True)
 
-    def _select_constituents(self, finance: pd.DataFrame) -> list[str]:
+    def _select_constituents(self, finance: pd.DataFrame) -> set[str]:
+        if finance.empty:
+            return set()
+
         annual_candidates = self._select_annual_candidates(finance)
         if annual_candidates.empty:
-            return []
+            return set()
 
         latest = finance.sort_values(["stock_code", "end_date", "ann_date"]).drop_duplicates(
             subset=["stock_code"],
@@ -61,7 +84,7 @@ class FinanceGrowthIndexStrategy(BaseStrategy):
             latest["stock_code"].isin(annual_candidates["stock_code"])
             & (latest["growth"] > self.latest_growth_threshold)
         ]
-        return sorted(latest["stock_code"].astype(str).unique())
+        return set(latest["stock_code"].astype(str).unique())
 
     def _select_annual_candidates(self, finance: pd.DataFrame) -> pd.DataFrame:
         annual = finance[finance["end_date"].dt.month.eq(12)].copy()

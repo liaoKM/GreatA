@@ -18,4 +18,8 @@ class BaseStrategy(ABC):
 
     @abstractmethod
     def on_bar_close(self, context) -> TargetPortfolio:
-        """Return the target portfolio for the current session."""
+        """Return the target portfolio for the current session.
+
+        Returning ``None`` means "no action; keep the current holdings".
+        Returning ``TargetPortfolio.empty()`` means "clear existing positions".
+        """
