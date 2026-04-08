@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from simple_backtrade import BacktestConfig, EmptyStrategy, TargetPortfolio
+from simple_backtrade import BacktestConfig, BacktestResult, EmptyStrategy, TargetPortfolio
 from simple_backtrade.data.portal import DataPortal
 from simple_backtrade.engine.runner import BacktestEngine
 from simple_backtrade.models import PublishedEvent
@@ -371,6 +371,134 @@ class FrameworkTests(unittest.TestCase):
         self.assertTrue(result.trades.empty)
         self.assertTrue(result.positions.empty)
         self.assertEqual(float(result.equity_curve.iloc[-1]), 2000.0)
+
+    def test_backtest_result_plot_can_save_image(self) -> None:
+        try:
+            import matplotlib  # noqa: F401
+        except ImportError:
+            self.skipTest("matplotlib is not installed")
+
+        _write_market_frame(self.data_root, "daily", "2026-01-02", [self._base_market_rows()[0]])
+        _write_market_frame(self.data_root, "daily", "2026-01-05", [self._base_market_rows()[1]])
+        benchmark = pd.Series(
+            [100.0, 101.0],
+            index=pd.to_datetime(["2026-01-02", "2026-01-05"]),
+            dtype="float64",
+        )
+
+        result = BacktestEngine(
+            BacktestConfig(
+                start="2026-01-02",
+                end="2026-01-05",
+                data_path=self.data_root,
+                initial_cash=1050,
+                warmup_bars=0,
+                benchmark=benchmark,
+            ),
+            BuyThenSellStrategy(),
+        ).run()
+
+        output_path = self.data_root / "result_plot.png"
+        figure, axes = result.plot(save_path=output_path)
+        self.assertEqual(len(axes), 3)
+        self.assertTrue(output_path.exists())
+        self.assertGreater(output_path.stat().st_size, 0)
+        figure.clf()
+
+    def test_backtest_result_merge_chains_equity_and_benchmark(self) -> None:
+        first = BacktestResult(
+            equity_curve=pd.Series(
+                [100.0, 110.0],
+                index=pd.to_datetime(["2026-01-02", "2026-01-05"]),
+                dtype="float64",
+            ),
+            positions=pd.DataFrame(
+                [
+                    {"session_date": pd.Timestamp("2026-01-05"), "stock_code": "AAA.SZ", "quantity": 100.0},
+                ]
+            ),
+            trades=pd.DataFrame(
+                [
+                    {
+                        "session_date": pd.Timestamp("2026-01-02"),
+                        "stock_code": "AAA.SZ",
+                        "side": "buy",
+                        "quantity": 100.0,
+                    }
+                ]
+            ),
+            event_log=pd.DataFrame(
+                [
+                    {
+                        "session_date": pd.Timestamp("2026-01-02"),
+                        "publish_date": pd.Timestamp("2026-01-02"),
+                        "stock_code": "AAA.SZ",
+                        "source": "finance",
+                        "subtype": None,
+                    }
+                ]
+            ),
+            summary={},
+            benchmark=pd.Series(
+                [100.0, 105.0],
+                index=pd.to_datetime(["2026-01-02", "2026-01-05"]),
+                dtype="float64",
+            ),
+        )
+        second = BacktestResult(
+            equity_curve=pd.Series(
+                [200.0, 220.0],
+                index=pd.to_datetime(["2026-01-06", "2026-01-07"]),
+                dtype="float64",
+            ),
+            positions=pd.DataFrame(
+                [
+                    {"session_date": pd.Timestamp("2026-01-06"), "stock_code": "BBB.SZ", "quantity": 50.0},
+                ]
+            ),
+            trades=pd.DataFrame(
+                [
+                    {
+                        "session_date": pd.Timestamp("2026-01-06"),
+                        "stock_code": "BBB.SZ",
+                        "side": "buy",
+                        "quantity": 50.0,
+                    }
+                ]
+            ),
+            event_log=pd.DataFrame(
+                [
+                    {
+                        "session_date": pd.Timestamp("2026-01-06"),
+                        "publish_date": pd.Timestamp("2026-01-06"),
+                        "stock_code": "BBB.SZ",
+                        "source": "finance",
+                        "subtype": None,
+                    }
+                ]
+            ),
+            summary={},
+            benchmark=pd.Series(
+                [300.0, 330.0],
+                index=pd.to_datetime(["2026-01-06", "2026-01-07"]),
+                dtype="float64",
+            ),
+        )
+
+        merged = BacktestResult.merge([second, first])
+
+        self.assertEqual(
+            merged.equity_curve.index.strftime("%Y-%m-%d").tolist(),
+            ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"],
+        )
+        for actual, expected in zip(merged.equity_curve.tolist(), [100.0, 110.0, 110.0, 121.0], strict=True):
+            self.assertAlmostEqual(actual, expected)
+        for actual, expected in zip(merged.benchmark.tolist(), [100.0, 105.0, 105.0, 115.5], strict=True):
+            self.assertAlmostEqual(actual, expected)
+        self.assertEqual(len(merged.positions), 2)
+        self.assertEqual(len(merged.trades), 2)
+        self.assertEqual(len(merged.event_log), 2)
+        self.assertAlmostEqual(float(merged.summary["end_equity"]), 121.0)
 
 
 if __name__ == "__main__":

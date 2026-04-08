@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pandas as pd
 
-from data_service.benchmark_storage import write_partitioned_benchmark_range
+from data_service.partition_writer import write_partitioned_data
 
 from ..report.result import BacktestResult
 from ..strategy.base import BaseStrategy
@@ -53,12 +53,12 @@ def build_registered_custom_benchmark(
             "close": result.equity_curve.astype("float64").values,
         }
     )
-    written = write_partitioned_benchmark_range(
+    written = write_partitioned_data(
         data_path=data_path,
-        benchmark_id=str(benchmark_id),
+        data_type="benchmark",
         frame=frame,
         start=config.start,
         end=config.end,
-        overwrite=True,
+        update_meta=False,
     )
     return result, [str(path) for path in written]

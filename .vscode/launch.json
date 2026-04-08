@@ -18,6 +18,26 @@
             "type": "debugpy",
             "request": "launch",
             "program": "./run.py",
+            "args": ["--start","2012-01-01","--end","2026-01-01","--workers","8"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "fetch",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./scripts/fetch.py",
+            "args": ["--until","2026-03-13","--type","finance"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "aggregate",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./scripts/aggregate.py",
+            "args": ["--type","finance"],
             "console": "integratedTerminal",
             "justMyCode": false
         }

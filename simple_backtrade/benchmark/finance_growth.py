@@ -7,7 +7,6 @@ import pandas as pd
 from ..models import TargetPortfolio
 from ..strategy.base import BaseStrategy
 
-
 class FinanceGrowthIndexStrategy(BaseStrategy):
     """Select stocks with strong annual growth and a positive latest report."""
 
@@ -49,6 +48,7 @@ class FinanceGrowthIndexStrategy(BaseStrategy):
 
         self.stocks_pool.difference_update(touched)
         self.stocks_pool.update(qualified_set)
+        print("{}: stocks pool {}".format(context.session_date,len(self.stocks_pool)))
 
     def on_bar_close(self, context):
         return TargetPortfolio.equal_weight(sorted(self.stocks_pool))
@@ -65,7 +65,10 @@ class FinanceGrowthIndexStrategy(BaseStrategy):
         frame["growth"] = frame["growth"].fillna(fallback)
         frame = frame.dropna(subset=["stock_code", "end_date", "ann_date", "growth"])
         frame["stock_code"] = frame["stock_code"].astype(str)
-        frame = frame.sort_values(["stock_code", "end_date", "ann_date", "publish_date"])
+        sort_columns = ["stock_code", "end_date", "ann_date"]
+        if "publish_date" in frame.columns:
+            sort_columns.append("publish_date")
+        frame = frame.sort_values(sort_columns)
         return frame.drop_duplicates(subset=["stock_code", "end_date"], keep="last").reset_index(drop=True)
 
     def _select_constituents(self, finance: pd.DataFrame) -> set[str]:

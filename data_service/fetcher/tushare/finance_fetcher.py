@@ -1,5 +1,5 @@
 """Tushare 财报数据拉取器"""
-from datetime import datetime
+from datetime import datetime,timedelta
 import time
 import pandas as pd
 import tushare as ts
@@ -11,6 +11,70 @@ class TushareFinanceFetcher(FinanceFetcher):
     """Tushare 财报数据拉取器"""
 
     MAX_FINANCE_ANNOUNCEMENT_LAG_DAYS = 124
+    fina_indicator_fields=[
+        "ts_code",
+        "ann_date",
+        "end_date",
+        "eps",
+        "dt_eps",
+        "total_revenue_ps",
+        "revenue_ps",
+        "capital_rese_ps",
+        "surplus_rese_ps",
+        "undist_profit_ps",
+        "extra_item",
+        "profit_dedt",
+        "gross_margin",
+        "ar_turn",
+        "op_income",
+        "fcff",
+        "fcfe",
+        "bps",
+        "ocfps",
+        "retainedps",
+        "cfps",
+        "ebit_ps",
+        "fcff_ps",
+        "fcfe_ps",
+        "netprofit_margin",
+        "grossprofit_margin",
+        "cogs_of_sales",
+        "expense_of_sales",
+        "profit_to_gr",
+        "saleexp_to_gr",
+        "adminexp_of_gr",
+        "finaexp_of_gr",
+        "impai_ttm",
+        "gc_of_gr",
+        "op_of_gr",
+        "ebit_of_gr",
+        "roe",
+        "roe_waa",
+        "roe_dt",
+        "roa",
+        "npta",
+        "roic",
+        "roe_yearly",
+        "roa2_yearly",
+        "debt_to_assets",
+        "roa_yearly",
+        "roa_dp",
+        "basic_eps_yoy",
+        "dt_eps_yoy",
+        "cfps_yoy",
+        "netprofit_yoy",
+        "dt_netprofit_yoy",
+        "tr_yoy",
+        "or_yoy",
+        "inv_turn",
+        "fixed_assets",
+        "q_netprofit_yoy",
+        "q_netprofit_qoq",
+        "op_yoy",
+        "ebt_yoy",
+        "update_flag"
+
+    ]
 
     def __init__(self, token: str = None, data_path: str = './data'):
         super().__init__(data_path)
@@ -68,7 +132,7 @@ class TushareFinanceFetcher(FinanceFetcher):
         ann_date = date.strftime('%Y%m%d')
 
         # 使用 fina_indicator_vip 接口，支持 ann_date 参数查询所有股票
-        df = self.pro.fina_indicator_vip(ann_date=ann_date)
+        df = self.pro.fina_indicator_vip(ann_date=ann_date,fields=self.fina_indicator_fields)
 
         if df is None or df.empty:
             return pd.DataFrame()
@@ -80,24 +144,25 @@ class TushareFinanceFetcher(FinanceFetcher):
 
         df['ann_date'] = pd.to_datetime(df['ann_date'])
         df['end_date'] = pd.to_datetime(df['end_date'])
+        df['update_flag'] = pd.to_numeric(df['update_flag'])
 
         # 丢弃上市后集中补发的历史财报，避免把过晚披露的数据带入后续分析和回测。
         announcement_lag = (df['ann_date'] - df['end_date']).dt.days
         df = df[announcement_lag <= self.MAX_FINANCE_ANNOUNCEMENT_LAG_DAYS].copy()
-        df = self._deduplicate_same_day_reissues(df)
+        df = df[df['update_flag']==1]
 
         return df
 
     def fetch_history(self, start: datetime, end: datetime) -> pd.DataFrame:
         """
-        拉取历史财报数据（按公告日期范围）
+        拉取历史财报数据（按发布日期范围）
 
         Args:
-            start: 开始日期（公告日期）
-            end: 结束日期（公告日期）
+            start: 开始日期（发布日期）
+            end: 结束日期（发布日期）
 
         Returns:
-            DataFrame包含公告日期在时间范围内所有财报
+            DataFrame包含发布日期在时间范围内所有财报
         """
         # fina_indicator_vip 的 ann_date 参数只支持单日查询
         # 需要遍历日期范围内的每一天
@@ -109,6 +174,7 @@ class TushareFinanceFetcher(FinanceFetcher):
             time.sleep(0.12)
             if df is not None and not df.empty:
                 all_dfs.append(df)
+            print("finance fetch:{}".format(current))
             current = datetime(current.year, current.month, current.day) + pd.Timedelta(days=1)
 
         if not all_dfs:
